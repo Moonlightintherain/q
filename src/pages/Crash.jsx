@@ -16,140 +16,6 @@ function Ton({ className = "inline-block w-4 h-4 ml-1 align-middle", alt = "TON"
   return <img src="/ton_logo.svg" alt={alt} className={className} />;
 }
 
-// Компонент графика
-function CrashChart({ multiplier, status, history }) {
-  const canvasRef = useRef(null);
-  const animationRef = useRef(null);
-  const dataRef = useRef([]);
-  const startTimeRef = useRef(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    const ctx = canvas.getContext('2d');
-    const width = canvas.width;
-    const height = canvas.height;
-
-    // Очищаем canvas
-    ctx.clearRect(0, 0, width, height);
-
-    if (status === 'betting' || status === 'waiting') {
-      // Показываем историю предыдущих раундов
-      if (history && history.length > 0) {
-        ctx.strokeStyle = '#444';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([2, 2]);
-        
-        const historyHeight = height * 0.3;
-        const barWidth = width / Math.min(history.length, 10);
-        
-        history.slice(0, 10).forEach((mult, index) => {
-          const x = width - (index + 1) * barWidth;
-          const normalizedHeight = Math.min(Math.log(mult) / Math.log(10), 1) * historyHeight;
-          
-          ctx.beginPath();
-          ctx.moveTo(x + barWidth/2, height - normalizedHeight);
-          ctx.lineTo(x + barWidth/2, height);
-          ctx.stroke();
-        });
-        
-        ctx.setLineDash([]);
-      }
-      
-      // Сброс данных для нового раунда
-      dataRef.current = [];
-      startTimeRef.current = null;
-      return;
-    }
-
-    if (status === 'running' || status === 'crashed') {
-      if (!startTimeRef.current) {
-        startTimeRef.current = Date.now();
-        dataRef.current = [{ time: 0, multiplier: 1.0 }];
-      }
-
-      // Добавляем новую точку данных
-      const currentTime = (Date.now() - startTimeRef.current) / 1000; // в секундах
-      dataRef.current.push({ time: currentTime, multiplier: multiplier });
-
-      // Ограничиваем количество точек для производительности
-      if (dataRef.current.length > 200) {
-        dataRef.current = dataRef.current.slice(-100);
-      }
-
-      const data = dataRef.current;
-      if (data.length < 2) return;
-
-      // Определяем масштаб
-      const maxTime = Math.max(...data.map(d => d.time));
-      const maxMultiplier = Math.max(...data.map(d => d.multiplier));
-      
-      // Логарифмический масштаб для Y
-      const getY = (mult) => {
-        const logMult = Math.log(mult);
-        const logMax = Math.log(Math.max(maxMultiplier, 2));
-        return height - (logMult / logMax) * height * 0.9;
-      };
-
-      const getX = (time) => (time / Math.max(maxTime, 1)) * width;
-
-      // Рисуем график
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = status === 'crashed' ? '#ff2d95' : '#39ff14';
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-
-      // Создаем градиент
-      if (status !== 'crashed') {
-        const gradient = ctx.createLinearGradient(0, 0, width, 0);
-        gradient.addColorStop(0, '#39ff14');
-        gradient.addColorStop(1, '#00e5ff');
-        ctx.strokeStyle = gradient;
-      }
-
-      ctx.beginPath();
-      ctx.moveTo(getX(data[0].time), getY(data[0].multiplier));
-
-      for (let i = 1; i < data.length; i++) {
-        ctx.lineTo(getX(data[i].time), getY(data[i].multiplier));
-      }
-      
-      ctx.stroke();
-
-      // Добавляем свечение
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = status === 'crashed' ? '#ff2d95' : '#39ff14';
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-
-      // Рисуем точку текущего положения
-      if (status === 'running') {
-        const lastPoint = data[data.length - 1];
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.arc(getX(lastPoint.time), getY(lastPoint.multiplier), 4, 0, Math.PI * 2);
-        ctx.fill();
-        
-        ctx.strokeStyle = '#39ff14';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      }
-    }
-  }, [multiplier, status, history]);
-
-  return (
-    <div className="absolute inset-0 pointer-events-none">
-      <canvas
-        ref={canvasRef}
-        width={300}
-        height={150}
-        className="w-full h-full opacity-60"
-      />
-    </div>
-  );
-}
-
 export default function Crash({ userId, setUserId, user, setUser }){
   const [bet, setBet] = useState("");
   const [status, setStatus] = useState("waiting");
@@ -157,39 +23,11 @@ export default function Crash({ userId, setUserId, user, setUser }){
   const [countdown, setCountdown] = useState(null);
   const [prevBets, setPrevBets] = useState([]);
   const [bets, setBets] = useState([]);
-  const [history, setHistory] = useState([]);
-  const [nextRoundBet, setNextRoundBet] = useState(null); // Ставка на следующий раунд
-  const [userProfiles, setUserProfiles] = useState({}); // Кэш профилей пользователей
+  const [history, setHistory] = useState([]); // Add multiplier history
   const evtRef = useRef(null);
   
   const myCurrentBet = useMemo(() => {
     return bets.find((b) => Number(b.userId) === Number(userId));
-  }, [bets, userId]);
-
-  // Получение профиля пользователя из Telegram
-  const getTelegramProfile = (telegramUserId) => {
-    if (userProfiles[telegramUserId]) {
-      return userProfiles[telegramUserId];
-    }
-    
-    // Заглушка - в реальном приложении здесь был бы запрос к API
-    const profile = {
-      first_name: `User`,
-      last_name: telegramUserId.toString().slice(-3),
-      photo_url: null // В реальном приложении получали бы из Telegram API
-    };
-    
-    setUserProfiles(prev => ({ ...prev, [telegramUserId]: profile }));
-    return profile;
-  };
-
-  // Сортированный список ставок: своя ставка первая, остальные по убыванию
-  const sortedBets = useMemo(() => {
-    const userIdNum = Number(userId);
-    const myBet = bets.find(b => Number(b.userId) === userIdNum);
-    const otherBets = bets.filter(b => Number(b.userId) !== userIdNum).sort((a, b) => b.amount - a.amount);
-    
-    return myBet ? [myBet, ...otherBets] : otherBets;
   }, [bets, userId]);
 
   useEffect(() => {
@@ -199,6 +37,7 @@ export default function Crash({ userId, setUserId, user, setUser }){
       fetch(`${API}/api/user/${userId}`)
         .then(async (r) => {
           if (r.status === 404) {
+            // User doesn't exist, create them
             return fetch(`${API}/api/user/create`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -255,7 +94,7 @@ export default function Crash({ userId, setUserId, user, setUser }){
             win: incoming.win != null ? Number(incoming.win) : null,
           });
         }
-        return Array.from(map.values());
+        return Array.from(map.values()).sort((a, b) => b.amount - a.amount);
       });
     };
 
@@ -284,7 +123,7 @@ export default function Crash({ userId, setUserId, user, setUser }){
     };
 
     const markCrash = ({ bets: finalBets }) => {
-      setBets(finalBets);
+      setBets(finalBets.sort((a, b) => b.amount - a.amount));
       setStatus("crashed");
     };
 
@@ -297,7 +136,7 @@ export default function Crash({ userId, setUserId, user, setUser }){
       }
     
       if (data.type === "snapshot") {
-        setBets(Array.isArray(data.bets) ? data.bets : []);
+        setBets(Array.isArray(data.bets) ? data.bets.sort((a, b) => b.amount - a.amount) : []);
         setStatus(data.status || "waiting");
         if (data.multiplier != null) setMultiplier(Number(data.multiplier));
         if (data.history) setHistory(data.history);
@@ -316,6 +155,7 @@ export default function Crash({ userId, setUserId, user, setUser }){
       }
 
       if (data.type === "crash") {
+        // Set the final multiplier from server before marking crash
         if (data.crashAt != null) setMultiplier(Number(data.crashAt));
         markCrash(data);
         if (data.history) setHistory(data.history);
@@ -327,20 +167,13 @@ export default function Crash({ userId, setUserId, user, setUser }){
         if (data.history) setHistory(data.history);
 
         if (data.status === "betting") {
-          setBets(Array.isArray(data.bets) ? data.bets : []);
+          setBets(Array.isArray(data.bets) ? data.bets.sort((a, b) => b.amount - a.amount) : []);
           setMultiplier(1);
           setCountdown(data.countdown ?? null);
-          
-          // Автоматически делаем ставку на следующий раунд, если была отложенная ставка
-          if (nextRoundBet && userId) {
-            setTimeout(() => {
-              placeBet(nextRoundBet);
-              setNextRoundBet(null);
-            }, 100);
-          }
         }
         if (data.status === "running") {
           setCountdown(null);
+          // Don't set multiplier from crashAt - let it grow naturally
           setMultiplier(1.0);
         }
         return;
@@ -348,7 +181,7 @@ export default function Crash({ userId, setUserId, user, setUser }){
 
       if (data.type === "tick") {
         if (data.multiplier != null) setMultiplier(Number(data.multiplier));
-        if (data.bets != null) setBets(data.bets);
+        if (data.bets != null) setBets(data.bets.sort((a, b) => b.amount - a.amount));
         return;
       }
     };
@@ -359,7 +192,7 @@ export default function Crash({ userId, setUserId, user, setUser }){
       es.close();
       evtRef.current = null;
     };
-  }, [userId, nextRoundBet]);
+  }, [userId]);
 
   useEffect(() => {
     if (status === "betting" && countdown != null && countdown > 0) {
@@ -369,35 +202,14 @@ export default function Crash({ userId, setUserId, user, setUser }){
   }, [status, countdown]);
 
   const placeBet = (amount) => {
-    const betAmount = Number(amount);
-    
-    // Проверка минимальной и максимальной ставки
-    if (betAmount < 0.1) {
-      alert("Минимальная ставка 0.1 TON");
-      return;
-    }
-    
-    if (user && betAmount > user.balance) {
-      alert("Недостаточно средств");
-      return;
-    }
-
-    // Если раунд уже идет, сохраняем ставку на следующий раунд
-    if (status === "running") {
-      setNextRoundBet(betAmount);
-      setBet(String(betAmount));
-      alert("Ставка будет размещена в следующем раунде");
-      return;
-    }
-
     fetch(`${API}/api/crash/bet`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: Number(userId), amount: betAmount }),
+      body: JSON.stringify({ userId: Number(userId), amount: Number(amount) }),
     }).then((r) => {
       if (!r.ok) return;
-      setBet(String(betAmount));
-      setPrevBets((prev) => [betAmount, ...prev.filter((x) => x !== betAmount)].slice(0, 3));
+      setBet(String(amount));
+      setPrevBets((prev) => [Number(amount), ...prev.filter((x) => x !== Number(amount))].slice(0, 3));
       const refreshUser = () => {
         fetch(`${API}/api/user/${userId}`)
           .then(async (r) => {
@@ -434,45 +246,39 @@ export default function Crash({ userId, setUserId, user, setUser }){
   if (!user) return <div className="p-6 neon-text">Загрузка...</div>;
 
   let messageNode = null;
-  if (status === "waiting") {
-    messageNode = <span>Ожидаем начала раунда...</span>;
-  } else if (status === "betting") {
-    if (myCurrentBet) {
-      messageNode = (
-        <span>
-          Ваша ставка: {formatTon(myCurrentBet.amount)} <Ton /> — до старта {countdown ?? 0}s
-        </span>
-      );
-    } else {
-      messageNode = <span>Введите ставку — до старта осталось {countdown ?? 0}s</span>;
-    }
-  } else if (status === "running" && myCurrentBet && myCurrentBet.status === "ongoing") {
+  if (status === "waiting") messageNode = <span>Ожидаем начала раунда...</span>;
+  else if (status === "betting" && !myCurrentBet)
+    messageNode = <span>Введите ставку — до старта осталось {countdown ?? 0}s</span>;
+  else if (status === "betting" && myCurrentBet)
     messageNode = (
       <span>
         Ваша ставка: {formatTon(myCurrentBet.amount)} <Ton />
       </span>
     );
-  } else if (status === "running" && myCurrentBet && myCurrentBet.status === "cashed") {
+  else if (status === "running" && myCurrentBet && myCurrentBet.status === "ongoing")
+    messageNode = (
+      <span>
+        Ваша ставка: {formatTon(myCurrentBet.amount)} <Ton />
+      </span>
+    );
+  else if (status === "running" && myCurrentBet && myCurrentBet.status === "cashed")
     messageNode = (
       <span>
         Ваша ставка {formatTon(myCurrentBet.amount)} <Ton /> → выигрыш {formatTon(myCurrentBet.win)} <Ton />
       </span>
     );
-  } else if (status === "crashed" && myCurrentBet && myCurrentBet.status === "cashed") {
+  else if (status === "crashed" && myCurrentBet && myCurrentBet.status === "cashed")
     messageNode = (
       <span>
         Ваша ставка {formatTon(myCurrentBet.amount)} <Ton /> → выигрыш {formatTon(myCurrentBet.win)} <Ton />
       </span>
     );
-  } else if (status === "crashed" && myCurrentBet && myCurrentBet.status === "lost") {
+  else if (status === "crashed" && myCurrentBet && myCurrentBet.status === "lost")
     messageNode = (
       <span>
-        Ставка {formatTon(myCurrentBet.amount)} <Ton /> проиграна
+        Ставка {formatTon(myCurrentBet.amount)} <Ton /> проиграла
       </span>
     );
-  } else if (status === "running" && !myCurrentBet) {
-    messageNode = <span>Раунд идет — ставки на следующий раунд</span>;
-  }
 
   let multiplierColor = "neon-text";
   if (status === "running") multiplierColor = "text-green-400";
@@ -515,12 +321,10 @@ export default function Crash({ userId, setUserId, user, setUser }){
         </div>
       </div>
 
-      <div className="flex-none flex justify-center items-center py-2 flex-col relative">
-        <CrashChart multiplier={multiplier} status={status} history={history} />
-        <div className={`text-4xl sm:text-6xl font-bold ${multiplierColor} relative z-10`}>
-          {Number(multiplier).toFixed(2)}x
-        </div>
+      <div className="flex-none flex justify-center items-center py-2 flex-col">
+        <div className={`text-4xl sm:text-6xl font-bold ${multiplierColor}`}>{Number(multiplier).toFixed(2)}x</div>
 
+        {/* History display */}
         <div className="mt-2 flex gap-1 flex-wrap justify-center">
           {history.slice(0, 10).map((mult, idx) => (
             <span 
@@ -542,26 +346,15 @@ export default function Crash({ userId, setUserId, user, setUser }){
 
       <div className="flex-1 overflow-y-auto p-2">
         <div className="bg-[rgba(0,0,0,0.45)] rounded-md p-2 border border-[rgba(0,229,255,0.06)] max-h-[30vh] sm:max-h-[40vh] overflow-auto">
-          {sortedBets.length === 0 ? (
+          {bets.length === 0 ? (
             <div className="text-gray-500 text-sm p-2 text-center">Пока нет ставок в этом раунде</div>
           ) : (
-            sortedBets.slice(0, 20).map((b, i) => {
-              const profile = getTelegramProfile(b.userId);
-              const isMyBet = Number(b.userId) === Number(userId);
-              
-              return (
-                <div key={i} className={`flex justify-between items-center py-1 text-sm border-b border-gray-700 ${isMyBet ? 'bg-[rgba(255,45,149,0.1)]' : ''}`}>
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 flex items-center justify-center text-xs text-white font-bold">
-                      {profile.first_name?.[0] || 'U'}
-                    </div>
-                    <span>{profile.first_name} {profile.last_name}</span>
-                    {isMyBet && <span className="text-pink-400 text-xs">(Вы)</span>}
-                  </div>
-                  {getBetStatusDisplay(b)}
-                </div>
-              );
-            })
+            bets.slice(0, 20).map((b, i) => (
+              <div key={i} className="flex justify-between py-1 text-sm border-b border-gray-700">
+                <span>ID {b.userId}</span>
+                {getBetStatusDisplay(b)}
+              </div>
+            ))
           )}
         </div>
       </div>
@@ -569,41 +362,22 @@ export default function Crash({ userId, setUserId, user, setUser }){
       <div className="flex-none px-2 sm:px-4 pb-2">
         <div className="text-center text-sm sm:text-lg min-h-[2rem] sm:min-h-[2.5rem] mb-2">{messageNode}</div>
 
-        {nextRoundBet && (
-          <div className="text-center text-yellow-400 text-sm mb-2">
-            Ставка {formatTon(nextRoundBet)} <Ton /> будет размещена в следующем раунде
-          </div>
-        )}
-
-        {/* Показываем поле ввода всегда, кроме crashed */}
-        {status !== "crashed" && (
+        {status === "betting" && !myCurrentBet && (
           <>
             <input
               type="number"
               value={bet}
               onChange={(e) => setBet(e.target.value)}
-              placeholder="Ставка (мин. 0.1 TON)"
-              min="0.1"
-              max={user ? user.balance : undefined}
-              step="0.1"
+              placeholder="Ставка"
               className="input-neon w-full mb-2"
             />
-            <button 
-              onClick={() => placeBet(parseFloat(bet))} 
-              className="neon-btn neon-btn-pink w-full mb-2"
-              disabled={!bet || parseFloat(bet) < 0.1 || (user && parseFloat(bet) > user.balance)}
-            >
-              {status === "running" ? "Ставка на след. раунд" : "Сделать ставку"}
+            <button onClick={() => placeBet(parseFloat(bet))} className="neon-btn neon-btn-pink w-full mb-2">
+              Сделать ставку
             </button>
             {prevBets.length > 0 && (
               <div className="flex gap-2">
                 {prevBets.map((b) => (
-                  <button 
-                    key={b} 
-                    onClick={() => placeBet(b)} 
-                    className="neon-btn neon-btn-yellow flex-1"
-                    disabled={user && b > user.balance}
-                  >
+                  <button key={b} onClick={() => placeBet(b)} className="neon-btn neon-btn-yellow flex-1">
                     {formatTon(b)} <Ton />
                   </button>
                 ))}
@@ -613,7 +387,7 @@ export default function Crash({ userId, setUserId, user, setUser }){
         )}
 
         {status === "running" && myCurrentBet && myCurrentBet.status === "ongoing" && (
-          <button onClick={cashOut} className="neon-btn neon-btn-yellow w-full mt-2">
+          <button onClick={cashOut} className="neon-btn neon-btn-yellow w-full">
             Вывести
           </button>
         )}
@@ -627,3 +401,4 @@ export default function Crash({ userId, setUserId, user, setUser }){
     </div>
   );
 }
+
