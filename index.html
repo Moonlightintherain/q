@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+    <title>Ton Kazino</title>
+    <script src="https://telegram.org/js/telegram-web-app.js?59"></script>
+    
+    <!-- Meta tags for Telegram WebApp -->
+    <meta name="telegram-webapp" content="true">
+    <meta name="format-detection" content="telephone=no">
+    
+    <!-- Prevent zoom and enable fullscreen -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    
+    <!-- Ensure ton_logo.svg is accessible -->
+    <link rel="preload" href="/ton_logo.svg" as="image" type="image/svg+xml">
+    
+    <style>
+      /* Prevent any default margins/padding that might interfere with fullscreen */
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      html, body {
+        height: 100%;
+        overflow: hidden;
+        -webkit-text-size-adjust: 100%;
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      
+      /* Telegram WebApp safe areas */
+      @supports (padding-top: env(safe-area-inset-top)) {
+        body {
+          padding-top: env(safe-area-inset-top);
+          padding-bottom: env(safe-area-inset-bottom);
+        }
+      }
+      
+      /* Loading state */
+      #loading {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, #050014 0%, #0b0024 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #00e5ff;
+        font-family: 'Orbitron', sans-serif;
+        z-index: 9999;
+      }
+      
+      .loading-spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid rgba(0,229,255,0.3);
+        border-top: 3px solid #00e5ff;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-right: 15px;
+      }
+      
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    </style>
+  </head>
+  <body class="font-display">
+    <div id="loading">
+      <div class="loading-spinner"></div>
+      <span>Загрузка Ton Kazino...</span>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx?v=3"></script>
+    
+    <script>
+      // Hide loading screen once app starts
+      window.addEventListener('DOMContentLoaded', () => {
+        setTimeout(() => {
+          const loading = document.getElementById('loading');
+          if (loading) {
+            loading.style.opacity = '0';
+            setTimeout(() => loading.remove(), 300);
+          }
+        }, 1000);
+      });
+      
+      // Telegram WebApp initialization
+      if (window.Telegram && window.Telegram.WebApp) {
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand();
+        
+        // Set theme
+        if (tg.themeParams) {
+          document.documentElement.style.setProperty('--tg-theme-bg-color', tg.themeParams.bg_color || '#050014');
+          document.documentElement.style.setProperty('--tg-theme-text-color', tg.themeParams.text_color || '#ffffff');
+        }
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,242 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* --- кастомные стили киберпанк --- */
+:root{
+  --neon-green: #39ff14;
+  --neon-pink: #ff2d95;
+  --neon-cyan: #00e5ff;
+  --bg-circle-color: #150a26;
+  --tg-viewport-height: 100vh;
+}
+
+/* Fullscreen mobile optimization */
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  position: relative;
+  width: 100%;
+}
+
+body {
+  @apply bg-gradient-to-br from-cyberBgStart to-cyberBgEnd text-cyan-100;
+  background-attachment: fixed;
+  font-family: 'Orbitron', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  
+  /* Prevent mobile zoom and scrolling */
+  -webkit-text-size-adjust: 100%;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  
+  /* Ensure proper mobile display */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--tg-viewport-height, 100vh);
+}
+
+/* Telegram safe areas for fullscreen mode */
+@supports (padding-top: env(safe-area-inset-top)) {
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Ensure proper mobile sizing */
+* {
+  box-sizing: border-box;
+}
+
+/* фоновая анимация — мягкий движущийся градиент */
+.bg-shift{
+  background: linear-gradient(120deg, rgba(11,0,36,0.6), rgba(10,0,20,0.6));
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  animation: shift 12s linear infinite;
+}
+@keyframes shift{
+  0%{background-position:0% 50%}
+  50%{background-position:100% 50%}
+  100%{background-position:0% 50%}
+}
+
+/* декоративный шум */
+.noise:after{
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(255,255,255,0.02) 1px, transparent 1px);
+  background-size: 2px 2px;
+  mix-blend-mode: overlay;
+  z-index: -1;
+}
+
+/* стеклянные панели */
+.glass-card{
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  border: 1px solid rgba(57,255,20,0.08);
+  backdrop-filter: blur(8px) saturate(120%);
+  -webkit-backdrop-filter: blur(8px) saturate(120%);
+  border-radius: 16px;
+  box-shadow: 0 6px 30px rgba(0,0,0,0.6), 0 0 30px rgba(57,255,20,0.02);
+}
+
+/* неоновый текст */
+.neon-text{
+  color: var(--neon-cyan);
+  text-shadow: 0 0 6px rgba(0,229,255,0.55), 0 0 16px rgba(0,229,255,0.25);
+}
+.neon-accent{
+  color: var(--neon-pink);
+  text-shadow: 0 0 6px rgba(255,45,149,0.45), 0 0 14px rgba(255,45,149,0.18);
+}
+.neon-text-green {
+  color: #39ff14;
+  text-shadow: 0 0 6px rgba(57,255,20,0.55), 0 0 16px rgba(57,255,20,0.25);
+}
+.neon-text-red {
+  color: #ff2d95;
+  text-shadow: 0 0 6px rgba(255,45,149,0.55), 0 0 16px rgba(255,45,149,0.25);
+}
+
+/* неоновые кнопки */
+.neon-btn{
+  @apply px-4 py-3 rounded-xl font-semibold tracking-wide transition-all;
+  background: linear-gradient(90deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  border: 1px solid rgba(255,255,255,0.06);
+  min-height: 44px; /* Touch-friendly minimum */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.neon-btn-green{
+  box-shadow: 0 6px 20px rgba(57,255,20,0.08), 0 0 20px rgba(57,255,20,0.12) inset;
+  border-color: rgba(57,255,20,0.18);
+  color: black;
+  background: linear-gradient(90deg, rgba(57,255,20,0.12), rgba(57,255,20,0.06));
+}
+.neon-btn-pink{
+  box-shadow: 0 6px 20px rgba(255,45,149,0.08), 0 0 20px rgba(255,45,149,0.12) inset;
+  border-color: rgba(255,45,149,0.18);
+  color: black;
+  background: linear-gradient(90deg, rgba(255,45,149,0.12), rgba(255,45,149,0.06));
+}
+.neon-btn-yellow{
+  box-shadow: 0 6px 20px rgba(255,210,0,0.08), 0 0 20px rgba(255,210,0,0.12) inset;
+  border-color: rgba(255,210,0,0.18);
+  color: black;
+  background: linear-gradient(90deg, rgba(255,210,0,0.12), rgba(255,210,0,0.06));
+}
+
+/* нижнее меню - адаптировано для fullscreen */
+.bottom-rail{
+  background: linear-gradient(180deg, rgba(0,0,0,0.45), rgba(0,0,0,0.25));
+  border: 1px solid rgba(0,229,255,0.06);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+  margin: 8px;
+  border-radius: 16px;
+}
+
+/* multiplier big - увеличенный размер */
+.multiplier{
+  font-size: 4rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+
+@media (max-width: 640px) {
+  .multiplier {
+    font-size: 3rem;
+  }
+}
+
+/* input styling */
+.input-neon{
+  @apply w-full rounded-lg px-4 py-3 bg-transparent border border-[rgba(255,255,255,0.06)];
+  color: var(--neon-cyan);
+  outline: none;
+  min-height: 44px; /* Touch-friendly minimum */
+  font-size: 16px; /* Prevent zoom on iOS */
+}
+
+/* Scrollable containers for bet lists */
+.bet-list-container {
+  max-height: 30vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Scrollable page containers */
+.page-container {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  height: 100%;
+}
+
+@media (max-width: 640px) {
+  .bet-list-container {
+    max-height: 25vh;
+  }
+}
+
+/* User avatar styling */
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(0,229,255,0.3);
+}
+
+/* Balance display in header */
+.balance-display {
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+@media (max-width: 640px) {
+  .balance-display {
+    font-size: 12px;
+  }
+}
+
+/* small helpers */
+.row-between{display:flex;justify-content:space-between;align-items:center}
+.fill-bg-circle {
+  fill: var(--bg-circle-color);
+}
+
+/* Prevent text selection on game elements */
+.game-element {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Loading and error states */
+.loading-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(0,229,255,0.3);
+  border-top: 2px solid var(--neon-cyan);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}

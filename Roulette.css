@@ -1,0 +1,165 @@
+/* Общие неоновые тексты */
+.neon-text {
+  color: #00ffff;
+  text-shadow:
+    0 0 5px #00ffff,
+    0 0 10px #00ffff,
+    0 0 20px #00ffff,
+    0 0 40px #00ffff;
+}
+
+/* Акцентный цвет для больших чисел/баланса */
+.neon-accent {
+  color: #ff00ff;
+  text-shadow:
+    0 0 5px #ff00ff,
+    0 0 10px #ff00ff,
+    0 0 20px #ff00ff,
+    0 0 40px #ff00ff;
+}
+
+/* Кнопки неоновые */
+.neon-btn {
+  background-color: #111827;
+  border: 2px solid #00ffff;
+  color: #00ffff;
+  font-weight: bold;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.neon-btn:hover {
+  background-color: #00ffff;
+  color: #111827;
+  box-shadow:
+    0 0 5px #00ffff,
+    0 0 10px #00ffff,
+    0 0 20px #00ffff,
+    0 0 40px #00ffff;
+}
+
+/* Кнопка желтая (для ставок) */
+.neon-btn-yellow {
+  border-color: #FFD700;
+  color: #FFD700;
+}
+
+.neon-btn-yellow:hover {
+  background-color: #FFD700;
+  color: #111827;
+  box-shadow:
+    0 0 5px #FFD700,
+    0 0 10px #FFD700,
+    0 0 20px #FFD700,
+    0 0 40px #FFD700;
+}
+
+/* Кнопка розовая */
+.neon-btn-pink {
+  border-color: #FF2D95;
+  color: #FF2D95;
+}
+
+.neon-btn-pink:hover {
+  background-color: #FF2D95;
+  color: #111827;
+  box-shadow:
+    0 0 5px #FF2D95,
+    0 0 10px #FF2D95,
+    0 0 20px #FF2D95,
+    0 0 40px #FF2D95;
+}
+
+/* Инпут неоновый - responsive */
+.input-neon {
+  background-color: #111827;
+  border: 2px solid #00ffff;
+  color: #00ffff;
+  padding: 0.5rem;
+  border-radius: 0.5rem;
+  font-weight: bold;
+  text-align: center;
+  transition: 0.2s;
+  min-height: 44px; /* Touch-friendly minimum */
+}
+
+@media (max-width: 640px) {
+  .input-neon {
+    padding: 0.75rem;
+    font-size: 16px; /* Prevent zoom on iOS */
+  }
+}
+
+/* Список ставок - более компактный */
+.bg-overlay {
+  background-color: rgba(0, 0, 0, 0.45);
+  border-radius: 0.5rem;
+  padding: 0.25rem;
+  border: 1px solid rgba(0,229,255,0.06);
+  max-height: 20vh;
+  overflow-y: auto;
+}
+
+/* Мобильные улучшения */
+@media (max-width: 640px) {
+  .neon-btn {
+    min-height: 44px; /* Touch-friendly */
+    font-size: 14px;
+  }
+  
+  .glass-card {
+    border-radius: 12px; /* Smaller radius on mobile */
+  }
+}
+
+/* Улучшения для колеса на мобильном */
+@media (max-width: 480px) {
+  .wheel-pointer svg {
+    width: 30px;
+    height: 30px;
+  }
+}
+
+/* Цвета текста победителя/проигрыша */
+.text-green-400 {
+  color: #39ff14;
+  text-shadow: 0 0 5px #39ff14, 0 0 10px #39ff14, 0 0 20px #39ff14;
+}
+
+.text-yellow-400 {
+  color: #FFD700;
+  text-shadow: 0 0 5px #FFD700, 0 0 10px #FFD700, 0 0 20px #FFD700;
+}
+
+/* Центр круга и стрелка */
+.wheel-center {
+  width: 1rem;
+  height: 1rem;
+  background-color: #fff;
+  border-radius: 50%;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 20;
+}
+
+.wheel-pointer {
+  width: 0;
+  height: 0;
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-bottom: 20px solid #fff;
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+}
+
+/* Добавляем неоновый эффект для своей доли на колесе */
+.my-slice-neon {
+  /* Эффект внутренней тени теперь реализуется через SVG-фильтр */
+}
