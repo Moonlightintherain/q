@@ -138,8 +138,15 @@ function startRouletteBettingCountdown() {
 }
 
 function endRouletteBetting() {
+  // Полностью останавливаем все таймеры
+  if (rouletteBettingTimer) {
+    clearInterval(rouletteBettingTimer);
+    rouletteBettingTimer = null;
+  }
+  
   currentRouletteRound.status = "running";
-  broadcastToRoulette({ type: "status", status: "running", message: "Раунд начался!" });
+  currentRouletteRound.countdown = null; // Убираем countdown
+  broadcastToRoulette({ type: "status", status: "running", countdown: null, message: "Раунд начался!" });
   
   const totalDegrees = 19 * 360 + Math.random() * 360;
   currentRouletteRound.winningDegrees = totalDegrees;
@@ -634,13 +641,17 @@ app.post("/api/roulette/bet", (req, res) => {
             }, 60000);
             
           } else if (currentRouletteRound.status === "waitingForPlayers" && Object.keys(rouletteBets).length >= 2) {
-            // Clear the waiting timer and its interval
+            // Полностью останавливаем таймер ожидания 60 секунд
             if (rouletteWaitingTimer) {
               clearTimeout(rouletteWaitingTimer);
               rouletteWaitingTimer = null;
             }
-            // Clear any existing countdown interval
-            broadcastToRoulette({ type: "clearWaitingCountdown" });
+
+            // Уведомляем клиентов о полной остановке таймера ожидания
+            currentRouletteRound.countdown = null;
+            broadcastToRoulette({ type: "stopWaitingTimer" });
+
+            // Запускаем новый таймер на 20 секунд
             startRouletteBettingCountdown();
           }
           
