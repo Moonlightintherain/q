@@ -409,7 +409,7 @@ export default function Crash({ userId, user, setUser }){
 
       {/* Контролы для ставок */}
       <div className="flex-none p-3">
-        {status === "betting" && !myCurrentBet && (
+        {!myCurrentBet && (
           <>
             <input
               type="number"
@@ -424,24 +424,30 @@ export default function Crash({ userId, user, setUser }){
             <button 
               onClick={() => placeBet(parseFloat(bet))} 
               className="neon-btn neon-btn-pink w-full mb-3"
-              disabled={!bet || parseFloat(bet) < 0.01 || (user && parseFloat(bet) > user.balance)}
+              disabled={status !== "betting" || !bet || parseFloat(bet) < 0.01 || (user && parseFloat(bet) > user.balance)}
             >
-              Сделать ставку
+              {status === "betting" ? "Сделать ставку" : "Ставки закрыты"}
             </button>
-            {prevBets.length > 0 && (
-              <div className="flex gap-2">
-                {prevBets.map((b) => (
-                  <button 
-                    key={b} 
-                    onClick={() => placeBet(b)} 
-                    className="neon-btn neon-btn-yellow flex-1 text-sm"
-                    disabled={user && b > user.balance}
-                  >
-                    {formatTon(b)} <Ton />
-                  </button>
-                ))}
-              </div>
-            )}
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setBet(prev => String(Math.max(0, (parseFloat(prev) || 0) + 0.1)))}
+                className="neon-btn neon-btn-yellow flex-1 text-sm"
+              >
+                +0.1
+              </button>
+              <button 
+                onClick={() => setBet(prev => String(Math.max(0, (parseFloat(prev) || 0) + 1)))}
+                className="neon-btn neon-btn-yellow flex-1 text-sm"
+              >
+                +1
+              </button>
+              <button 
+                onClick={() => setBet(prev => String(Math.max(0, (parseFloat(prev) || 0) + 10)))}
+                className="neon-btn neon-btn-yellow flex-1 text-sm"
+              >
+                +10
+              </button>
+            </div>
           </>
         )}
 
