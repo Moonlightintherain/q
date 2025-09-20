@@ -181,9 +181,12 @@ export default function Roulette({ userId, user, setUser }) {
         });
         setTotalBet(data.totalBet);
         fetchUser(userId);
-      } else if (data.type === "countdown") {
-        setCountdown(data.countdown);
-      } else if (data.type === "run") {
+        } else if (data.type === "countdown") {
+          setCountdown(data.countdown);
+        } else if (data.type === "stopWaitingTimer") {
+          setCountdown(null); // Полностью убираем countdown
+        } else if (data.type === "run") {
+          setCountdown(null); // Убираем countdown при старте раунда
         setStatus("running");
         setWinningDegrees(data.winningDegrees);
         setBets(data.bets);
@@ -321,7 +324,7 @@ export default function Roulette({ userId, user, setUser }) {
             </svg>
           </div>
           {/* Указатель */}
-          <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 -translate-y-2 z-20">
+          <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1 z-20">
             <svg width="30" height="30" viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M15 30 L5 10 L25 10 Z" fill="#fff" filter="drop-shadow(0 0 5px rgba(255,255,255,0.8))" />
             </svg>
@@ -333,6 +336,10 @@ export default function Roulette({ userId, user, setUser }) {
               <div className="text-center">
                 <p className="text-2xl sm:text-3xl neon-text">Ожидание</p>
                 <p className="text-sm sm:text-base neon-text">игроков</p>
+              </div>
+            ) : status === "running" ? (
+              <div className="text-center">
+                <p className="text-2xl sm:text-3xl neon-text">Крутим!</p>
               </div>
             ) : (
               <div className="text-center flex items-center justify-center">
