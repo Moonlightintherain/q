@@ -197,6 +197,7 @@ export default function Roulette({ userId, user, setUser }) {
           wheelRef.current.style.transform = `rotate(${data.winningDegrees}deg)`;
         }
       } else if (data.type === "winner") {
+        setCountdown(null); // Убираем countdown при старте раунда
         setWinner(data.winner);
         setStatus("finished");
         if (data.winner) {
@@ -235,16 +236,6 @@ export default function Roulette({ userId, user, setUser }) {
 
     setBet("");
     fetchUser(userId);
-  };
-
-  const getCountdownDisplay = () => {
-    if (status === "waitingForPlayers" && countdown > 0) {
-      return `${countdown}с`;
-    }
-    if (status === "betting" && countdown > 0) {
-      return `${countdown}с`;
-    }
-    return null;
   };
 
   const showBetInput = status === "waiting" || status === "waitingForPlayers" || status === "betting";
