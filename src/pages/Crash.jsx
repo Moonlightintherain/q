@@ -6,7 +6,7 @@ function formatTon(value) {
   if (value == null) return "0";
   let num = typeof value === "string" ? parseFloat(value.replace(/\s+/g, "").replace(",", ".")) : Number(value);
   if (!isFinite(num)) return "0";
-  let s = num.toFixed(4);
+  let s = num.toFixed(2);
   s = s.replace(/(\.\d*?[1-9])0+$/g, "$1");
   s = s.replace(/\.0+$/g, "");
   return s;
@@ -430,19 +430,19 @@ export default function Crash({ userId, user, setUser }){
             </button>
             <div className="flex gap-2">
               <button 
-                onClick={() => setBet(prev => String(Math.max(0, (parseFloat(prev) || 0) + 0.1)))}
+                onClick={() => setBet(prev => String(Math.max(0, Number(((parseFloat(prev) || 0) + 0.1).toFixed(2)))))}
                 className="neon-btn neon-btn-yellow flex-1 text-sm"
               >
                 +0.1
               </button>
               <button 
-                onClick={() => setBet(prev => String(Math.max(0, (parseFloat(prev) || 0) + 1)))}
+                onClick={() => setBet(prev => String(Math.max(0, Number(((parseFloat(prev) || 0) + 1).toFixed(2)))))}
                 className="neon-btn neon-btn-yellow flex-1 text-sm"
               >
                 +1
               </button>
               <button 
-                onClick={() => setBet(prev => String(Math.max(0, (parseFloat(prev) || 0) + 10)))}
+                onClick={() => setBet(prev => String(Math.max(0, Number(((parseFloat(prev) || 0) + 10).toFixed(2)))))}
                 className="neon-btn neon-btn-yellow flex-1 text-sm"
               >
                 +10
