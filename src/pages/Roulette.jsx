@@ -7,7 +7,7 @@ function formatTon(value) {
   if (value == null) return "0";
   let num = typeof value === "string" ? parseFloat(value.replace(/\s+/g, "").replace(",", ".")) : Number(value);
   if (!isFinite(num)) return "0";
-  let s = num.toFixed(4);
+  let s = num.toFixed(2);
   s = s.replace(/(\.\d*?[1-9])0+$/g, "$1");
   s = s.replace(/\.0+$/g, "");
   return s;
