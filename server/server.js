@@ -82,7 +82,8 @@ let rouletteBets = {};
 
 let rouletteWaitingTimer = null;
 let rouletteBettingTimer = null;
-let rouletteEndRoundTimer = null;
+let rouletteWaitingInterval = null;
+let rouletteBettingInterval = null;
 
 function safeWrite(res, data) {
   try {
@@ -106,52 +107,213 @@ function broadcastToRoulette(data) {
   });
 }
 
+
 function resetRouletteRound() {
+  // Полностью очищаем все таймеры
+  if (rouletteWaitingTimer) {
+    clearTimeout(rouletteWaitingTimer);
+    rouletteWaitingTimer = null;
+  }
+  if (rouletteBettingTimer) {
+    clearTimeout(rouletteBettingTimer);
+    rouletteBettingTimer = null;
+  }
+  if (rouletteWaitingInterval) {
+    clearInterval(rouletteWaitingInterval);
+    rouletteWaitingInterval = null;
+  }
+  if (rouletteBettingInterval) {
+    clearInterval(rouletteBettingInterval);
+    rouletteBettingInterval = null;
+  }
+  
   currentRouletteRound = {
     status: "waiting",
     totalBet: 0,
     countdown: null,
+    countdownType: null,
     winner: null,
     winningDegrees: null,
   };
   rouletteBets = {};
-  broadcastToRoulette({ type: "status", status: "waiting", message: "Ожидание ставок..." });
+  broadcastToRoulette({ 
+    type: "status", 
+    status: "waiting", 
+    countdown: null,
+    countdownType: null,
+    message: "Ожидание ставок..." 
+  });
 }
 
 function startRouletteBettingCountdown() {
-  if (rouletteBettingTimer) clearInterval(rouletteBettingTimer);
-  let countdown = 20;
-  currentRouletteRound.status = "betting";
-  currentRouletteRound.countdown = countdown;
-  broadcastToRoulette({ type: "status", status: "betting", countdown, message: "Прием ставок..." });
+  // Полностью очищаем все предыдущие таймеры
+  if (rouletteWaitingTimer) {
+    clearTimeout(rouletteWaitingTimer);
+    rouletteWaitingTimer = null;
+  }
+  if (rouletteWaitingInterval) {
+    clearInterval(rouletteWaitingInterval);
+    rouletteWaitingInterval = null;
+  }
+  if (rouletteBettingTimer) {
+    clearTimeout(rouletteBettingTimer);
+    rouletteBettingTimer = null;
+  }
+  if (rouletteBettingInterval) {
+    clearInterval(rouletteBettingInterval);
+    rouletteBettingInterval = null;
+  }
 
-  rouletteBettingTimer = setInterval(() => {
+    let countdown = 20;
+    currentRouletteRound.status = "betting";
+    currentRouletteRound.countdown = countdown;
+    currentRouletteRound.countdownType = "betting";
+
+    // Получаем все ставки с данными пользователей для отправки
+    const betsArray = Object.values(rouletteBets).slice().sort((a, b) => b.amount - a.amount);
+
+    Promise.all(betsArray.map(bet => 
+      new Promise(resolve => {
+        db.get("SELECT username, first_name, last_name, photo_url FROM users WHERE id = ?", [bet.userId], (err, user) => {
+          resolve({
+            ...bet,
+            username: user?.username || null,
+            first_name: user?.first_name || null,
+            last_name: user?.last_name || null,
+            photo_url: user?.photo_url || null
+          });
+        });
+      })
+    )).then(enrichedBets => {
+      broadcastToRoulette({ 
+        type: "status", 
+        status: "betting", 
+        countdown, 
+        countdownType: "betting",
+        bets: enrichedBets,
+        totalBet: enrichedBets.reduce((sum, bet) => sum + bet.amount, 0),
+        message: "Прием ставок..." 
+      });
+    });
+
+  rouletteBettingInterval = setInterval(() => {
     countdown--;
     currentRouletteRound.countdown = countdown;
-    broadcastToRoulette({ type: "countdown", countdown });
+    broadcastToRoulette({ 
+      type: "countdown", 
+      countdown,
+      countdownType: "betting"
+    });
+    
     if (countdown <= 0) {
-      clearInterval(rouletteBettingTimer);
-      rouletteBettingTimer = null;
+      clearInterval(rouletteBettingInterval);
+      rouletteBettingInterval = null;
       endRouletteBetting();
     }
   }, 1000);
+  
+  rouletteBettingTimer = setTimeout(() => {
+    if (rouletteBettingInterval) {
+      clearInterval(rouletteBettingInterval);
+      rouletteBettingInterval = null;
+    }
+    endRouletteBetting();
+  }, 20000);
 }
 
 function endRouletteBetting() {
   // Полностью останавливаем все таймеры
   if (rouletteBettingTimer) {
-    clearInterval(rouletteBettingTimer);
+    clearTimeout(rouletteBettingTimer);
     rouletteBettingTimer = null;
+  }
+  if (rouletteBettingInterval) {
+    clearInterval(rouletteBettingInterval);
+    rouletteBettingInterval = null;
   }
   
   currentRouletteRound.status = "running";
-  currentRouletteRound.countdown = null; // Убираем countdown
-  broadcastToRoulette({ type: "status", status: "running", countdown: null, message: "Раунд начался!" });
+  currentRouletteRound.countdown = null;
+  currentRouletteRound.countdownType = null;
   
-  const totalDegrees = 19 * 360 + Math.random() * 360;
+  broadcastToRoulette({ 
+    type: "status", 
+    status: "running", 
+    countdown: null,
+    countdownType: null,
+    message: "Раунд начался!" 
+  });
+  
+  // НОВАЯ ЛОГИКА: рассчитываем победителя и градусы заранее
+  const betsArray = Object.values(rouletteBets).slice().sort((a, b) => b.amount - a.amount);
+  const totalBet = betsArray.reduce((sum, b) => sum + b.amount, 0);
+  
+  let totalDegrees;
+  let winner = null;
+  //if true {
+  // ТЕСТОВАЯ ЛОГИКА: если есть игрок 5863213308, делаем его победителем
+  const testPlayer = betsArray.find(bet => Number(bet.userId) === 5863213308);
+  if (testPlayer) {
+    console.log("🎯 ТЕСТ: Принудительная победа для игрока 5863213308");
+    // Находим сектор этого игрока
+    let cumulativeDegrees = 0;
+    let testPlayerStartDegrees = 0;
+    let testPlayerEndDegrees = 0;
+    for (const bet of betsArray) {
+      const percent = bet.amount / totalBet;
+      const startDegrees = cumulativeDegrees;
+      const endDegrees = cumulativeDegrees + percent * 360;
+      if (Number(bet.userId) === 5863213308) {
+        testPlayerStartDegrees = startDegrees;
+        testPlayerEndDegrees = endDegrees;
+        break;
+      }
+      cumulativeDegrees = endDegrees;
+    }
+    // Рассчитываем случайную позицию в секторе тестового игрока
+    const sectorSize = testPlayerEndDegrees - testPlayerStartDegrees;
+    const randomPositionInSector = testPlayerStartDegrees + (Math.random() * sectorSize);
+    // Рассчитываем нужные градусы поворота с учетом нормализации
+    const targetNormalizedDegrees = randomPositionInSector;
+    const targetFinalDegrees = (360 - targetNormalizedDegrees + 90) % 360;
+    // Создаем градусы поворота (базовые обороты + нужная финальная позиция)
+    const baseRotations = 19; // базовое количество оборотов
+    totalDegrees = baseRotations * 360 + targetFinalDegrees;
+    winner = testPlayer;
+    console.log(`🎯 ТЕСТ: Сектор игрока ${testPlayerStartDegrees.toFixed(1)}°-${testPlayerEndDegrees.toFixed(1)}°`);
+    console.log(`🎯 ТЕСТ: Целевая позиция: ${randomPositionInSector.toFixed(1)}°`);
+    console.log(`🎯 ТЕСТ: Градусы поворота: ${totalDegrees.toFixed(1)}°`);
+  } else {
+    // Выбираем случайного победителя
+    // Сначала генерируем случайные градусы
+    totalDegrees = 19 * 360 + Math.random() * 360;
+    const finalDegrees = totalDegrees % 360;
+    
+    // Находим победителя по этим градусам
+    let cumulativeDegrees = 0;
+    for (const bet of betsArray) {
+      const percent = bet.amount / totalBet;
+      const startDegrees = cumulativeDegrees;
+      const endDegrees = cumulativeDegrees + percent * 360;
+      
+      const normalizedDegrees = (360 - finalDegrees + 90) % 360;
+      
+      if (normalizedDegrees >= startDegrees && normalizedDegrees < endDegrees) {
+        winner = bet;
+        break;
+      }
+      cumulativeDegrees = endDegrees;
+    }
+  }
+  
   currentRouletteRound.winningDegrees = totalDegrees;
+  currentRouletteRound.preCalculatedWinner = winner; // Сохраняем заранее рассчитанного победителя
   
-  broadcastToRoulette({ type: "run", winningDegrees: totalDegrees, bets: Object.values(rouletteBets) });
+  broadcastToRoulette({ 
+    type: "run", 
+    winningDegrees: totalDegrees, 
+    bets: Object.values(rouletteBets) 
+  });
 
   setTimeout(() => {
     finishRouletteRound(totalDegrees);
@@ -159,27 +321,11 @@ function endRouletteBetting() {
 }
 
 function finishRouletteRound(totalDegrees) {
-  const finalDegrees = totalDegrees % 360;
-  
   const betsArray = Object.values(rouletteBets).slice().sort((a, b) => b.amount - a.amount);
   const totalBet = betsArray.reduce((sum, b) => sum + b.amount, 0);
-
-  let cumulativeDegrees = 0;
-  let winner = null;
-
-  for (const bet of betsArray) {
-    const percent = bet.amount / totalBet;
-    const startDegrees = cumulativeDegrees;
-    const endDegrees = cumulativeDegrees + percent * 360;
-    
-    const normalizedDegrees = (360 - finalDegrees + 90) % 360;
-    
-    if (normalizedDegrees >= startDegrees && normalizedDegrees < endDegrees) {
-      winner = bet;
-      break;
-    }
-    cumulativeDegrees = endDegrees;
-  }
+  
+  // Используем заранее рассчитанного победителя
+  const winner = currentRouletteRound.preCalculatedWinner;
   
   if (winner) {
     const winAmount = totalBet;
@@ -605,53 +751,75 @@ app.post("/api/roulette/bet", (req, res) => {
           const betsArray = Object.values(rouletteBets).slice().sort((a, b) => b.amount - a.amount);
           
           if (isFirstBet) {
+            // Первый игрок - запускаем таймер ожидания 60 секунд
             currentRouletteRound.status = "waitingForPlayers";
             let countdown = 60;
             currentRouletteRound.countdown = countdown;
+            currentRouletteRound.countdownType = "waiting";
+
             broadcastToRoulette({
               type: "status", 
               status: "waitingForPlayers", 
               countdown, 
+              countdownType: "waiting",
               message: "Ожидание второго игрока...", 
               bets: betsArray
             });
-
+          
+            // Очищаем предыдущие таймеры
             if (rouletteWaitingTimer) clearTimeout(rouletteWaitingTimer);
-            
-            const countdownInterval = setInterval(() => {
+            if (rouletteWaitingInterval) clearInterval(rouletteWaitingInterval);
+
+            rouletteWaitingInterval = setInterval(() => {
               countdown--;
               currentRouletteRound.countdown = countdown;
-              broadcastToRoulette({ type: "countdown", countdown });
+              broadcastToRoulette({ 
+                type: "countdown", 
+                countdown,
+                countdownType: "waiting"
+              });
+
               if (countdown <= 0) {
-                clearInterval(countdownInterval);
+                clearInterval(rouletteWaitingInterval);
+                rouletteWaitingInterval = null;
               }
             }, 1000);
-            
+
             rouletteWaitingTimer = setTimeout(() => {
-              clearInterval(countdownInterval);
+              if (rouletteWaitingInterval) {
+                clearInterval(rouletteWaitingInterval);
+                rouletteWaitingInterval = null;
+              }
+
               if (Object.keys(rouletteBets).length === 1) {
                 const loneBet = rouletteBets[userId];
                 db.run("UPDATE users SET balance = balance + ? WHERE id = ?", [loneBet.amount, loneBet.userId], (err) => {
                    db.run("UPDATE users SET balance = balance - ? WHERE id = 0", [loneBet.amount], () => {
-                      broadcastToRoulette({ type: "status", status: "waiting", message: "Раунд отменен, ставка возвращена" });
+                      broadcastToRoulette({ 
+                        type: "status", 
+                        status: "waiting", 
+                        countdown: null,
+                        countdownType: null,
+                        message: "Раунд отменен, ставка возвращена" 
+                      });
                       resetRouletteRound();
                    });
                 });
               }
             }, 60000);
-            
+
           } else if (currentRouletteRound.status === "waitingForPlayers" && Object.keys(rouletteBets).length >= 2) {
-            // Полностью останавливаем таймер ожидания 60 секунд
+            // Второй игрок присоединился - полностью останавливаем таймер ожидания и запускаем таймер ставок
             if (rouletteWaitingTimer) {
               clearTimeout(rouletteWaitingTimer);
               rouletteWaitingTimer = null;
             }
-
-            // Уведомляем клиентов о полной остановке таймера ожидания
-            currentRouletteRound.countdown = null;
-            broadcastToRoulette({ type: "stopWaitingTimer" });
-
-            // Запускаем новый таймер на 20 секунд
+            if (rouletteWaitingInterval) {
+              clearInterval(rouletteWaitingInterval);
+              rouletteWaitingInterval = null;
+            }
+          
+            // Полностью убираем таймер ожидания и запускаем таймер ставок 20 секунд
             startRouletteBettingCountdown();
           }
           
