@@ -4,8 +4,11 @@ import Crash from "./pages/Crash";
 import Roulette from "./pages/Roulette";
 import Profile from "./pages/Profile";
 import { initTelegram } from "./telegram-client";
+import { TonConnectProvider } from "./components/TonConnectProvider";
+import { config } from "./config";
 
-const API = import.meta.env.VITE_API_URL || "http://localhost:4000";
+const API = config.apiUrl;
+
 
 function TonLogo({ className = "w-6 h-6 sm:w-8 sm:h-8" }) {
   // Исправляем путь к логотипу - добавляем /src/ для корректной загрузки
@@ -18,7 +21,7 @@ function TonLogo({ className = "w-6 h-6 sm:w-8 sm:h-8" }) {
 export default function App() {
   const [activePage, setActivePage] = useState("crash");
   const [userId, setUserId] = useState(null);
-  const [user, setUser] = useState(null);            
+  const [user, setUser] = useState(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [viewportHeight, setViewportHeight] = useState(window.innerHeight);
 
@@ -41,7 +44,7 @@ export default function App() {
           fetch(`${API}/webapp/validate`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
+            body: JSON.stringify({
               initData: window.Telegram.WebApp.initData,
               userData: tgUser
             }),
@@ -53,7 +56,7 @@ export default function App() {
               console.error("❌ Validation failed:", err);
             });
         }
-        
+
         // Set up viewport height management for fullscreen mode
         const updateViewportHeight = () => {
           if (window.Telegram && window.Telegram.WebApp) {
@@ -62,7 +65,7 @@ export default function App() {
             const height = tg.viewportHeight || window.innerHeight;
             setViewportHeight(height);
             document.documentElement.style.setProperty('--tg-viewport-height', `${height}px`);
-            
+
             // Ensure fullscreen mode
             if (tg.expand) tg.expand();
           } else {
@@ -72,18 +75,18 @@ export default function App() {
         };
 
         updateViewportHeight();
-        
+
         // Listen for viewport changes
         if (window.Telegram && window.Telegram.WebApp) {
           window.Telegram.WebApp.onEvent('viewportChanged', updateViewportHeight);
         }
-        
+
         window.addEventListener('resize', updateViewportHeight);
-        
+
         return () => {
           window.removeEventListener('resize', updateViewportHeight);
         };
-        
+
       } catch (e) {
         console.error("❌ Telegram authentication failed:", e);
         setUser({ error: "Telegram authentication failed: " + e.message });
@@ -106,17 +109,17 @@ export default function App() {
       .then(async (r) => {
         if (r.status === 404) {
           console.log("👤 User not found, creating new user...");
-          
+
           return fetch(`${API}/api/user/create`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
+            body: JSON.stringify({
               userId: userId,
-              userData: { id: userId } 
+              userData: { id: userId }
             }),
           });
         }
-        
+
         if (!r.ok) {
           throw new Error(`HTTP ${r.status}: ${await r.text()}`);
         }
@@ -134,63 +137,65 @@ export default function App() {
   }, [userId]);
 
   return (
-    <div 
-      className="flex flex-col w-full"
-      style={{ height: 'var(--tg-viewport-height, 100vh)' }}
-    >
-      {/* Header - адаптирован под fullscreen режим */}
-      <header className="w-full flex items-center justify-between px-4 py-2 bg-gradient-to-r from-transparent to-transparent border-b border-[rgba(0,229,255,0.1)] flex-none">
-        <div className="flex items-center">
-          <TonLogo className="w-6 h-6" />
-          <h1 className="ml-2 text-lg font-bold neon-text">Ton Kazino</h1>
-        </div>
-        
-        {/* Баланс в правом верхнем углу */}
-        {user && !user.error && (
-          <div className="text-right">
-            <div className="text-xs text-gray-400">Баланс</div>
-            <div className="text-sm neon-accent">
-              {user.balance ? Number(user.balance).toFixed(4).replace(/\.?0+$/, '') : '0'} <TonLogo className="w-3 h-3 inline" />
-            </div>
+    <TonConnectProvider>
+      <div
+        className="flex flex-col w-full"
+        style={{ height: 'var(--tg-viewport-height, 100vh)' }}
+      >
+        {/* Header - адаптирован под fullscreen режим */}
+        <header className="w-full flex items-center justify-between px-4 py-2 bg-gradient-to-r from-transparent to-transparent border-b border-[rgba(0,229,255,0.1)] flex-none">
+          <div className="flex items-center">
+            <TonLogo className="w-6 h-6" />
+            <h1 className="ml-2 text-lg font-bold neon-text">Ton Kazino</h1>
           </div>
-        )}
-      </header>
 
-      {/* Main content area - занимает всю доступную высоту */}
-      <main className="flex-1 flex flex-col min-h-0 w-full overflow-hidden">
-        <div className="glass-card m-2 p-3 flex-1 flex flex-col min-h-0 overflow-y-auto">
-          {loadingAuth ? (
-            <div className="flex-1 flex items-center justify-center">
-              <span className="neon-text">Авторизация...</span>
+          {/* Баланс в правом верхнем углу */}
+          {user && !user.error && (
+            <div className="text-right">
+              <div className="text-xs text-gray-400">Баланс</div>
+              <div className="text-sm neon-accent">
+                {user.balance ? Number(user.balance).toFixed(4).replace(/\.?0+$/, '') : '0'} <TonLogo className="w-3 h-3 inline" />
+              </div>
             </div>
-          ) : user && user.error ? (
-            <div className="flex-1 flex items-center justify-center">
-              <span className="text-red-400">{user.error}</span>
-            </div>
-          ) : !user ? (
-            <div className="flex-1 flex items-center justify-center">
-              <span className="text-red-400">Ошибка загрузки пользователя</span>
-            </div>
-          ) : (
-            <>
-              {activePage === "crash" && (
-                <Crash userId={userId} user={user} setUser={setUser} />
-              )}
-              {activePage === "roulette" && (
-                <Roulette userId={userId} user={user} setUser={setUser} />
-              )}
-              {activePage === "profile" && (
-                <Profile userId={userId} user={user} setUser={setUser} />
-              )}
-            </>
           )}
-        </div>
-      </main>
+        </header>
 
-      {/* Bottom menu - закреплено внизу */}
-      <div className="flex-none w-full">
-        <BottomMenu activePage={activePage} setActivePage={setActivePage} />
+        {/* Main content area - занимает всю доступную высоту */}
+        <main className="flex-1 flex flex-col min-h-0 w-full overflow-hidden">
+          <div className="glass-card m-2 p-3 flex-1 flex flex-col min-h-0 overflow-y-auto">
+            {loadingAuth ? (
+              <div className="flex-1 flex items-center justify-center">
+                <span className="neon-text">Авторизация...</span>
+              </div>
+            ) : user && user.error ? (
+              <div className="flex-1 flex items-center justify-center">
+                <span className="text-red-400">{user.error}</span>
+              </div>
+            ) : !user ? (
+              <div className="flex-1 flex items-center justify-center">
+                <span className="text-red-400">Ошибка загрузки пользователя</span>
+              </div>
+            ) : (
+              <>
+                {activePage === "crash" && (
+                  <Crash userId={userId} user={user} setUser={setUser} />
+                )}
+                {activePage === "roulette" && (
+                  <Roulette userId={userId} user={user} setUser={setUser} />
+                )}
+                {activePage === "profile" && (
+                  <Profile userId={userId} user={user} setUser={setUser} />
+                )}
+              </>
+            )}
+          </div>
+        </main>
+
+        {/* Bottom menu - закреплено внизу */}
+        <div className="flex-none w-full">
+          <BottomMenu activePage={activePage} setActivePage={setActivePage} />
+        </div>
       </div>
-    </div>
+    </TonConnectProvider>
   );
 }
