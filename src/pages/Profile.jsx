@@ -1,6 +1,11 @@
 import React, { useEffect, useState } from "react";
+import { useTonConnectUI, useTonWallet } from '@tonconnect/ui-react';
+import { config } from '../config';
+import { DebugModal } from '../components/DebugModal';
+import { useSmartLogger } from '../hooks/useSmartLogger';
+import { config } from '../config';
 
-const API = import.meta.env.VITE_API_URL;
+const API = config.apiUrl;
 
 function formatTon(value) {
   if (value == null) return "0";
@@ -19,9 +24,9 @@ function Ton({ className = "inline-block w-4 h-4 ml-1 align-middle", alt = "TON"
 function UserAvatar({ user, size = "w-24 h-24" }) {
   if (user?.photo_url) {
     return (
-      <img 
-        src={user.photo_url} 
-        alt={user.first_name || 'User'} 
+      <img
+        src={user.photo_url}
+        alt={user.first_name || 'User'}
         className={`${size} rounded-full object-cover border-4 border-gradient-to-br from-cyan-500 to-pink-500 shadow-2xl shadow-cyan-500/20`}
         onError={(e) => {
           e.target.style.display = 'none';
@@ -30,7 +35,7 @@ function UserAvatar({ user, size = "w-24 h-24" }) {
       />
     );
   }
-  
+
   const initials = (user?.first_name?.[0] || '') + (user?.last_name?.[0] || '');
   return (
     <div className={`${size} rounded-full bg-gradient-to-br from-cyan-500 to-pink-500 flex items-center justify-center text-white font-bold text-2xl border-4 border-cyan-400/30 shadow-2xl shadow-cyan-500/20`}>
@@ -52,13 +57,162 @@ function getUserDisplayName(user) {
   return `ID ${user?.id || 'Unknown'}`;
 }
 
-export default function Profile({ userId, user, setUser }){
+export default function Profile({ userId, user, setUser }) {
   const [loading, setLoading] = useState(false);
+  const [tonConnectUI] = useTonConnectUI();
+  const wallet = useTonWallet();
+  const [depositAmount, setDepositAmount] = useState('');
+  const [isDepositing, setIsDepositing] = useState(false);
+
+  // Smart logger (автоматически включается/отключается через config)
+  const { debugData, logInfo, logSuccess, logError, logWarning, showDebug, closeDebug, clearLogs } = useSmartLogger();
+
+  const handleDeposit = async () => {
+    clearLogs(); // Очищаем предыдущие логи
+    logInfo('🚀 Начинаем процесс депозита');
+
+    // Проверки
+    logInfo('🔍 Проверяем данные:', {
+      hasWallet: !!wallet,
+      walletAddress: wallet?.account?.address,
+      depositAmount,
+      userId,
+      parsedAmount: parseFloat(depositAmount)
+    });
+
+    if (!wallet) {
+      logError('❌ Кошелек не подключен');
+      showDebug('Ошибка депозита', new Error('Кошелек не подключен'));
+      return;
+    }
+
+    if (!depositAmount || parseFloat(depositAmount) < 0.01) {
+      logError('❌ Неверная сумма депозита');
+      showDebug('Ошибка депозита', new Error('Минимальная сумма: 0.01 TON'));
+      return;
+    }
+
+    setIsDepositing(true);
+
+    try {
+      const amount = parseFloat(depositAmount);
+      const nanotons = Math.floor(amount * 1e9);
+
+      logSuccess('💰 Рассчитаны суммы:', {
+        tonAmount: amount,
+        nanotons: nanotons
+      });
+
+      const casinoAddress = config.casinoWalletAddress;
+      logInfo('🏦 Адрес казино:', { casinoAddress });
+
+      if (!casinoAddress) {
+        throw new Error('Casino wallet address not configured in .env');
+      }
+
+      const transaction = {
+        validUntil: Math.floor(Date.now() / 1000) + 300,
+        messages: [
+          {
+            address: casinoAddress,
+            amount: nanotons.toString()
+          }
+        ]
+      };
+
+      logInfo('📝 Создана транзакция:', transaction);
+
+      logInfo('📤 Отправляем транзакцию в TON Connect...');
+      const result = await tonConnectUI.sendTransaction(transaction);
+
+      logSuccess('✅ Транзакция отправлена:', {
+        result: result,
+        boc: result?.boc,
+        hash: result?.hash
+      });
+
+      if (result) {
+        logInfo('📡 Отправляем данные на сервер...');
+
+        const serverData = {
+          userId: userId,
+          amount: amount,
+          transactionHash: result.boc || result.hash || JSON.stringify(result)
+        };
+
+        logInfo('📡 Данные для сервера:', serverData);
+
+        const response = await fetch(`${API}/api/user/deposit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(serverData)
+        });
+
+        logInfo('📡 Ответ сервера получен:', {
+          status: response.status,
+          statusText: response.statusText,
+          ok: response.ok
+        });
+
+        const responseData = await response.json();
+        logInfo('📡 Данные ответа:', responseData);
+
+        if (!response.ok) {
+          throw new Error(`Server error: ${response.status} - ${responseData.error || 'Unknown error'}`);
+        }
+
+        logSuccess('🎉 Депозит успешно обработан!');
+
+        // Обновляем данные пользователя
+        logInfo('🔄 Обновляем данные пользователя...');
+        loadUser(userId);
+        setDepositAmount('');
+
+        logSuccess(`✅ Депозит завершен: ${amount} TON добавлено на баланс`);
+        showDebug('Депозит успешно выполнен');
+
+      } else {
+        throw new Error('Транзакция не была отправлена (пользователь отклонил?)');
+      }
+
+    } catch (error) {
+      logError('❌ Произошла ошибка:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
+
+      // Определяем тип ошибки для пользователя
+      let userFriendlyMessage = 'Неизвестная ошибка';
+
+      if (error.message.includes('User declined') || error.message.includes('rejected')) {
+        userFriendlyMessage = 'Транзакция отклонена пользователем';
+        logWarning('⚠️ Пользователь отклонил транзакцию');
+      } else if (error.message.includes('Network') || error.message.includes('fetch')) {
+        userFriendlyMessage = 'Ошибка сети или сервера';
+        logError('🌐 Проблема с сетью или сервером');
+      } else if (error.message.includes('Server error')) {
+        userFriendlyMessage = 'Ошибка сервера';
+        logError('🔥 Ошибка на сервере');
+      } else if (error.message.includes('Casino wallet')) {
+        userFriendlyMessage = 'Ошибка конфигурации кошелька';
+        logError('⚙️ Проблема с конфигурацией');
+      }
+
+      logError(`💔 Итоговое сообщение пользователю: ${userFriendlyMessage}`);
+
+      showDebug('Ошибка при депозите', error);
+
+    } finally {
+      setIsDepositing(false);
+      logInfo('🏁 Процесс депозита завершен');
+    }
+  };
 
   const loadUser = (id) => {
     if (!id) return;
     setLoading(true);
-    
+
     fetch(`${API}/api/user/${id}`)
       .then(async (r) => {
         if (r.status === 404) {
@@ -115,15 +269,15 @@ export default function Profile({ userId, user, setUser }){
         <div className="flex justify-center mb-4">
           <UserAvatar user={user} size="w-32 h-32" />
         </div>
-        
+
         <h2 className="text-2xl font-bold neon-text mb-2">
           {getUserDisplayName(user)}
         </h2>
-        
+
         {user.username && (
           <p className="text-gray-400 text-sm mb-1">@{user.username}</p>
         )}
-        
+
         <p className="text-gray-500 text-xs">ID: {user.id}</p>
       </div>
 
@@ -135,27 +289,99 @@ export default function Profile({ userId, user, setUser }){
             {formatTon(user.balance)}
             <Ton className="w-8 h-8 ml-2" />
           </div>
-          <button 
-            onClick={handleRefresh} 
-            className="neon-btn neon-btn-green px-6 py-2 text-sm"
-            disabled={loading}
-          >
-            {loading ? "Обновление..." : "Обновить баланс"}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleRefresh}
+              className="neon-btn neon-btn-green px-6 py-2 text-sm"
+              disabled={loading}
+            >
+              {loading ? "Обновление..." : "Обновить баланс"}
+            </button>
+            {/* Кнопка для просмотра конфигурации - добавить в секцию с кнопками */}
+            {config.debugMode && (
+              <button
+                onClick={() => {
+                  clearLogs();
+                  logInfo('🔧 Конфигурация приложения:', {
+                    apiUrl: API,
+                    appDomain: config.appDomain,
+                    casinoAddress: config.casinoWalletAddress,
+                    manifestUrl: config.manifestUrl
+                  });
+                  logInfo('👤 Данные пользователя:', user);
+                  logInfo('💼 Данные кошелька:', wallet);
+                  showDebug('Информация о конфигурации');
+                }}
+                className="neon-btn w-full py-2 text-sm mb-2"
+              >
+                🔧 Debug: Конфигурация
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Кнопки пополнения и вывода */}
       <div className="flex-1 flex flex-col justify-end">
         <div className="space-y-4">
-          <button className="neon-btn neon-btn-green w-full py-4 text-lg font-semibold">
-            💰 Пополнить баланс
-          </button>
+          {!wallet ? (
+            <button
+              onClick={() => tonConnectUI.openModal()}
+              className="neon-btn neon-btn-green w-full py-4 text-lg font-semibold"
+            >
+              🔗 Подключить кошелек
+            </button>
+          ) : (
+            <div className="glass-card p-4 mb-4">
+              <div className="text-sm text-gray-400 mb-2">Подключен кошелек:</div>
+              <div className="text-xs neon-text mb-4">
+                {wallet.account.address.slice(0, 6)}...{wallet.account.address.slice(-6)}
+              </div>
+
+              <div className="mb-4">
+                <input
+                  type="number"
+                  value={depositAmount}
+                  onChange={(e) => setDepositAmount(e.target.value)}
+                  placeholder="Введите сумму TON"
+                  className="input-neon mb-3"
+                  step="0.01"
+                  min="0.01"
+                />
+              </div>
+
+              <button
+                onClick={handleDeposit}
+                disabled={isDepositing || !depositAmount || parseFloat(depositAmount) < 0.01}
+                className="neon-btn neon-btn-green w-full py-3 text-base font-semibold mb-2"
+              >
+                {isDepositing ? "Отправка..." : `💰 Пополнить на ${depositAmount || '0'} TON`}
+              </button>
+
+              <button
+                onClick={() => tonConnectUI.disconnect()}
+                className="neon-btn w-full py-2 text-sm"
+              >
+                🔌 Отключить кошелек
+              </button>
+            </div>
+          )}
+
           <button className="neon-btn neon-btn-pink w-full py-4 text-lg font-semibold">
             💸 Вывести средства
           </button>
         </div>
       </div>
+      {/* Debug Modal - показывается только в debug режиме */}
+      {config.debugMode && (
+        <DebugModal
+          isOpen={debugData.isOpen}
+          onClose={closeDebug}
+          title={debugData.title}
+          logs={debugData.logs}
+          error={debugData.error}
+        />
+      )}
     </div>
   );
 }
