@@ -80,6 +80,7 @@ export default function Roulette({ userId, user, setUser }) {
   const [bet, setBet] = useState("");
   const [status, setStatus] = useState("waiting");
   const [countdown, setCountdown] = useState(null);
+  const [countdownType, setCountdownType] = useState(null);
   const [totalBet, setTotalBet] = useState(0);
   const [bets, setBets] = useState([]);
   const [winningDegrees, setWinningDegrees] = useState(0);
@@ -152,21 +153,29 @@ export default function Roulette({ userId, user, setUser }) {
         setStatus(data.status);
         setTotalBet(data.totalBet || 0);
         setCountdown(data.countdown);
+        setCountdownType(data.countdownType || null);
         if (data.winningDegrees) setWinningDegrees(data.winningDegrees);
         if (data.winner) setWinner(data.winner);
       } else if (data.type === "status") {
         setStatus(data.status);
         setCountdown(data.countdown);
+        setCountdownType(data.countdownType || null);
         setMessage(data.message || "");
+
+        // Всегда обновляем ставки если они есть в сообщении
         if (data.bets) {
           setBets(data.bets);
-          setTotalBet(data.bets.reduce((sum, bet) => sum + bet.amount, 0));
+          setTotalBet(data.totalBet || data.bets.reduce((sum, bet) => sum + bet.amount, 0));
         }
+
+        // Сброс только при статусе waiting
         if (data.status === 'waiting') {
           setBets([]);
           setTotalBet(0);
           setWinner(null);
           setWinningDegrees(0);
+          setCountdown(null);
+          setCountdownType(null);
           if (wheelRef.current) {
             wheelRef.current.style.transform = `rotate(0deg)`;
             wheelRef.current.style.transition = `none`;
@@ -181,12 +190,12 @@ export default function Roulette({ userId, user, setUser }) {
         });
         setTotalBet(data.totalBet);
         fetchUser(userId);
-        } else if (data.type === "countdown") {
-          setCountdown(data.countdown);
-        } else if (data.type === "stopWaitingTimer") {
-          setCountdown(null); // Полностью убираем countdown
-        } else if (data.type === "run") {
-          setCountdown(null); // Убираем countdown при старте раунда
+      } else if (data.type === "countdown") {
+        setCountdown(data.countdown);
+        setCountdownType(data.countdownType || null);
+      } else if (data.type === "run") {
+        setCountdown(null);
+        setCountdownType(null);
         setStatus("running");
         setWinningDegrees(data.winningDegrees);
         setBets(data.bets);
@@ -197,7 +206,8 @@ export default function Roulette({ userId, user, setUser }) {
           wheelRef.current.style.transform = `rotate(${data.winningDegrees}deg)`;
         }
       } else if (data.type === "winner") {
-        setCountdown(null); // Убираем countdown при старте раунда
+        setCountdown(null);
+        setCountdownType(null);
         setWinner(data.winner);
         setStatus("finished");
         if (data.winner) {
@@ -246,8 +256,8 @@ export default function Roulette({ userId, user, setUser }) {
       {/* Колесо рулетки */}
       <div className="flex-none flex justify-center items-center pt-4 pb-2">
         <div className="relative w-56 h-56 sm:w-64 sm:h-64">
-          {/* Круговой таймер */}
-          {countdown && countdown > 0 && (
+          {/* Круговой таймер - показывается только для определенных типов */}
+          {countdown && countdown > 0 && countdownType && (
             <svg className="absolute inset-0 w-full h-full transform -rotate-90 z-10" viewBox="0 0 200 200">
               <circle
                 cx="100"
@@ -261,15 +271,15 @@ export default function Roulette({ userId, user, setUser }) {
                 cx="100"
                 cy="100"
                 r="98"
-                stroke="#00e5ff"
+                stroke={countdownType === "waiting" ? "#ffd700" : "#00e5ff"}
                 strokeWidth="2"
                 fill="none"
                 strokeDasharray={`${2 * Math.PI * 98}`}
-                strokeDashoffset={`${2 * Math.PI * 98 * (1 - (countdown / (status === "waitingForPlayers" ? 60 : 20)))}`}
+                strokeDashoffset={`${2 * Math.PI * 98 * (1 - (countdown / (countdownType === "waiting" ? 60 : 20)))}`}
                 strokeLinecap="round"
                 className="transition-all duration-1000 linear"
                 style={{
-                  filter: 'drop-shadow(0 0 5px #00e5ff)'
+                  filter: `drop-shadow(0 0 5px ${countdownType === "waiting" ? "#ffd700" : "#00e5ff"})`
                 }}
               />
             </svg>
