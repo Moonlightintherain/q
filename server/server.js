@@ -8,6 +8,165 @@ const sqlite3 = sqlite3pkg.verbose();
 import path from "path";
 import { fileURLToPath } from "url";
 
+// Добавляем защиту и санитизацию
+function sanitizeInput(input) {
+  if (typeof input !== 'string') return input;
+  return input.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/javascript:/gi, '')
+    .replace(/on\w+\s*=/gi, '')
+    .trim();
+}
+
+function validateTelegramData(initData) {
+  try {
+    const urlParams = new URLSearchParams(initData);
+    const hash = urlParams.get("hash");
+    if (!hash) return false;
+
+    urlParams.delete("hash");
+    const dataCheckArr = [];
+    urlParams.forEach((val, key) => {
+      dataCheckArr.push(`${key}=${val}`);
+    });
+    dataCheckArr.sort();
+    const dataCheckString = dataCheckArr.join("\n");
+
+    const secret = crypto.createHmac("sha256", "WebAppData").update(BOT_TOKEN).digest();
+    const calculatedHash = crypto.createHmac("sha256", secret).update(dataCheckString).digest("hex");
+
+    // Проверяем временную метку (данные не должны быть старше 1 часа)
+    const authDate = urlParams.get("auth_date");
+    if (authDate) {
+      const authTime = parseInt(authDate) * 1000;
+      const now = Date.now();
+      if (now - authTime > 3600000) { // 1 час
+        console.warn("⚠️ Telegram data is too old");
+        return false;
+      }
+    }
+
+    return calculatedHash === hash;
+  } catch (error) {
+    console.error("Error validating Telegram data:", error);
+    return false;
+  }
+}
+
+// Connection pool для SQLite
+class DatabasePool {
+  constructor(dbPath, maxConnections = 5) {
+    this.dbPath = dbPath;
+    this.maxConnections = maxConnections;
+    this.connections = [];
+    this.waiting = [];
+  }
+
+  async getConnection() {
+    return new Promise((resolve, reject) => {
+      if (this.connections.length > 0) {
+        resolve(this.connections.pop());
+      } else if (this.getActiveConnections() < this.maxConnections) {
+        const db = new sqlite3.Database(this.dbPath, (err) => {
+          if (err) reject(err);
+          else resolve(db);
+        });
+      } else {
+        this.waiting.push({ resolve, reject });
+      }
+    });
+  }
+
+  releaseConnection(db) {
+    if (this.waiting.length > 0) {
+      const { resolve } = this.waiting.shift();
+      resolve(db);
+    } else {
+      this.connections.push(db);
+    }
+  }
+
+  getActiveConnections() {
+    return this.maxConnections - this.connections.length - this.waiting.length;
+  }
+
+  async closeAll() {
+    const allConnections = [...this.connections];
+    this.connections = [];
+
+    return Promise.all(allConnections.map(db =>
+      new Promise(resolve => db.close(resolve))
+    ));
+  }
+}
+
+// Функция для логирования транзакций
+async function logTransaction(userId, type, amount, fee, transactionHash, walletAddress, status = 'pending') {
+  const db = await dbPool.getConnection();
+
+  return new Promise((resolve, reject) => {
+    const now = Math.floor(Date.now() / 1000);
+
+    db.run(`
+      INSERT INTO transactions 
+      (user_id, type, amount, fee, transaction_hash, wallet_address, status, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `, [userId, type, amount, fee, transactionHash, walletAddress, status, now],
+      function (err) {
+        dbPool.releaseConnection(db);
+        if (err) {
+          console.error("Failed to log transaction:", err);
+          reject(err);
+        } else {
+          console.log(`✅ Transaction logged: ${type} ${amount} TON for user ${userId}`);
+          resolve(this.lastID);
+        }
+      });
+  });
+}
+
+// Функция для обновления статуса транзакции
+async function updateTransactionStatus(transactionId, status) {
+  const db = await dbPool.getConnection();
+
+  return new Promise((resolve, reject) => {
+    const now = Math.floor(Date.now() / 1000);
+
+    db.run(`
+      UPDATE transactions 
+      SET status = ?, completed_at = ?
+      WHERE id = ?
+    `, [status, now, transactionId],
+      function (err) {
+        dbPool.releaseConnection(db);
+        if (err) {
+          console.error("Failed to update transaction status:", err);
+          reject(err);
+        } else {
+          console.log(`✅ Transaction ${transactionId} status updated to ${status}`);
+          resolve();
+        }
+      });
+  });
+}
+
+// Защита от дублирования транзакций
+async function isDuplicateTransaction(transactionHash) {
+  if (!transactionHash) return false;
+
+  const db = await dbPool.getConnection();
+
+  return new Promise((resolve, reject) => {
+    db.get("SELECT id FROM transactions WHERE transaction_hash = ?", [transactionHash], (err, row) => {
+      dbPool.releaseConnection(db);
+      if (err) {
+        reject(err);
+      } else {
+        resolve(!!row);
+      }
+    });
+  });
+}
+
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -15,6 +174,8 @@ const __dirname = path.dirname(__filename);
 
 const dbPath = path.join(__dirname, "database.sqlite");
 const db = new sqlite3.Database(dbPath);
+// Создаем пул соединений
+const dbPool = new DatabasePool(dbPath, 5);
 
 db.serialize(() => {
   db.run(`
@@ -54,21 +215,7 @@ if (!BOT_TOKEN) {
 }
 
 function checkSignature(initData) {
-  const urlParams = new URLSearchParams(initData);
-  const hash = urlParams.get("hash");
-  urlParams.delete("hash");
-
-  const dataCheckArr = [];
-  urlParams.forEach((val, key) => {
-    dataCheckArr.push(`${key}=${val}`);
-  });
-  dataCheckArr.sort();
-  const dataCheckString = dataCheckArr.join("\n");
-
-  const secret = crypto.createHmac("sha256", "WebAppData").update(BOT_TOKEN).digest();
-  const _hash = crypto.createHmac("sha256", secret).update(dataCheckString).digest("hex");
-
-  return _hash === hash;
+  return validateTelegramData(initData);
 }
 
 let crashClients = [];
@@ -106,7 +253,6 @@ function broadcastToRoulette(data) {
     } catch (e) { }
   });
 }
-
 
 function resetRouletteRound() {
   // Полностью очищаем все таймеры
@@ -432,12 +578,21 @@ app.get("/api/roulette/stream", (req, res) => {
 });
 
 app.post("/webapp/validate", (req, res) => {
-  const { initData, userData } = req.body;
+  let { initData, userData } = req.body;
+
   if (!initData) {
     return res.status(400).json({ ok: false, error: "no initData provided" });
   }
 
-  console.log("🔍 Validating initData:", initData);
+  // Санитизация данных
+  initData = sanitizeInput(initData);
+  if (userData) {
+    userData.first_name = sanitizeInput(userData.first_name);
+    userData.last_name = sanitizeInput(userData.last_name);
+    userData.username = sanitizeInput(userData.username);
+  }
+
+  console.log("🔍 Validating initData:", initData.substring(0, 100) + "...");
 
   // Development mode without BOT_TOKEN
   if (!BOT_TOKEN) {
@@ -838,47 +993,67 @@ app.post("/api/roulette/bet", (req, res) => {
 });
 
 // Endpoint для обработки депозитов
-app.post("/api/user/deposit", (req, res) => {
+app.post("/api/user/deposit", async (req, res) => {
   console.log('💰 Received deposit request:', req.body);
 
-  const { userId, amount, transactionHash } = req.body;
+  let { userId, amount, transactionHash } = req.body;
 
-  if (!userId || !amount || amount <= 0) {
+  // Санитизация входных данных
+  userId = parseInt(userId);
+  amount = parseFloat(amount);
+  transactionHash = sanitizeInput(transactionHash);
+
+  if (!userId || !amount || amount <= 0 || !transactionHash) {
     console.log('❌ Invalid deposit data:', { userId, amount, transactionHash });
     return res.status(400).json({ error: "Invalid deposit data" });
   }
 
-  // Можно добавить дополнительную проверку транзакции здесь
-  console.log(`💰 Processing deposit: User ${userId}, Amount ${amount} TON, TX: ${transactionHash}`);
-
-  db.run("UPDATE users SET balance = balance + ? WHERE id = ?", [amount, userId], function (err) {
-    if (err) {
-      console.error("❌ Failed to update balance:", err);
-      return res.status(500).json({ error: "Database error: " + err.message });
+  try {
+    // Проверка на дублирование транзакции
+    const isDuplicate = await isDuplicateTransaction(transactionHash);
+    if (isDuplicate) {
+      console.log(`⚠️ Duplicate transaction detected: ${transactionHash}`);
+      return res.status(400).json({ error: "Transaction already processed" });
     }
 
-    console.log(`✅ User ${userId} deposited ${amount} TON`);
+    // Логируем транзакцию
+    const transactionId = await logTransaction(userId, 'deposit', amount, 0, transactionHash, null, 'pending');
 
-    db.get("SELECT * FROM users WHERE id = ?", [userId], (err, user) => {
-      if (err || !user) {
-        console.error("❌ Failed to fetch updated user:", err);
-        return res.status(500).json({ error: "Failed to fetch updated user" });
+    console.log(`💰 Processing deposit: User ${userId}, Amount ${amount} TON, TX: ${transactionHash}`);
+
+    db.run("UPDATE users SET balance = balance + ? WHERE id = ?", [amount, userId], async function (err) {
+      if (err) {
+        console.error("❌ Failed to update balance:", err);
+        await updateTransactionStatus(transactionId, 'failed');
+        return res.status(500).json({ error: "Database error: " + err.message });
       }
 
-      try {
-        user.gifts = JSON.parse(user.gifts || "[]");
-      } catch (e) {
-        user.gifts = [];
-      }
+      // Обновляем статус транзакции
+      await updateTransactionStatus(transactionId, 'completed');
 
-      console.log(`✅ Updated user balance: ${user.balance}`);
-      res.json({ success: true, user });
+      console.log(`✅ User ${userId} deposited ${amount} TON`);
+
+      db.get("SELECT * FROM users WHERE id = ?", [userId], (err, user) => {
+        if (err || !user) {
+          console.error("❌ Failed to fetch updated user:", err);
+          return res.status(500).json({ error: "Failed to fetch updated user" });
+        }
+
+        try {
+          user.gifts = JSON.parse(user.gifts || "[]");
+        } catch (e) {
+          user.gifts = [];
+        }
+
+        console.log(`✅ Updated user balance: ${user.balance}`);
+        res.json({ success: true, user, transactionId });
+      });
     });
-  });
-});
 
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "public/index.html"));
+  } catch (error) {
+    console.error("❌ Deposit processing error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 function generateCrashRound(immediateCrashDivisor = 50, houseEdge = 0.01) {
@@ -1025,24 +1200,25 @@ function startCrashLoop() {
   runRound();
 }
 
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "index.html"));
-});
-
 // Endpoint для обработки выводов
-app.post("/api/user/withdraw", (req, res) => {
+app.post("/api/user/withdraw", async (req, res) => {
   console.log('💸 Received withdrawal request:', req.body);
 
-  const { userId, amount, walletAddress } = req.body;
+  let { userId, amount, walletAddress } = req.body;
+
+  // Санитизация входных данных
+  userId = parseInt(userId);
+  amount = parseFloat(amount);
+  walletAddress = sanitizeInput(walletAddress);
 
   if (!userId || !amount || amount <= 0 || !walletAddress) {
     console.log('❌ Invalid withdrawal data:', { userId, amount, walletAddress });
     return res.status(400).json({ error: "Invalid withdrawal data" });
   }
 
-  const withdrawalAmount = Number(amount);
-  const withdrawalFee = Number(process.env.WITHDRAWAL_FEE);
-  const minWithdrawal = Number(process.env.MIN_WITHDRAWAL);
+  const withdrawalAmount = amount;
+  const withdrawalFee = parseFloat(process.env.WITHDRAWAL_FEE) || 0.001;
+  const minWithdrawal = parseFloat(process.env.MIN_WITHDRAWAL) || 0.01;
 
   if (withdrawalAmount < minWithdrawal) {
     return res.status(400).json({
@@ -1050,65 +1226,172 @@ app.post("/api/user/withdraw", (req, res) => {
     });
   }
 
-  console.log(`💸 Processing withdrawal: User ${userId}, Amount ${withdrawalAmount} TON, Fee ${withdrawalFee} TON, To: ${walletAddress}`);
+  try {
+    // Генерируем уникальный ID для транзакции вывода
+    const withdrawalHash = `withdrawal_${userId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-  db.get("SELECT * FROM users WHERE id = ?", [userId], (err, user) => {
-    if (err) {
-      console.error("❌ Failed to get user:", err);
-      return res.status(500).json({ error: "Database error: " + err.message });
-    }
+    // Логируем транзакцию
+    const transactionId = await logTransaction(userId, 'withdrawal', withdrawalAmount, withdrawalFee, withdrawalHash, walletAddress, 'pending');
 
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
+    console.log(`💸 Processing withdrawal: User ${userId}, Amount ${withdrawalAmount} TON, Fee ${withdrawalFee} TON, To: ${walletAddress}`);
 
-    const totalCost = withdrawalAmount + withdrawalFee;
-
-    if (user.balance < totalCost) {
-      return res.status(400).json({
-        error: `Недостаточно средств. Требуется: ${totalCost.toFixed(4)} TON (включая комиссию ${withdrawalFee} TON)`
-      });
-    }
-
-    // Списываем средства с баланса пользователя
-    db.run("UPDATE users SET balance = balance - ? WHERE id = ?", [totalCost, userId], function (err2) {
-      if (err2) {
-        console.error("❌ Failed to update balance:", err2);
-        return res.status(500).json({ error: "Database error: " + err2.message });
+    db.get("SELECT * FROM users WHERE id = ?", [userId], async (err, user) => {
+      if (err) {
+        console.error("❌ Failed to get user:", err);
+        await updateTransactionStatus(transactionId, 'failed');
+        return res.status(500).json({ error: "Database error: " + err.message });
       }
 
-      // Добавляем комиссию к балансу казино (ID = 0)
-      console.log(`✅ User ${userId} withdrew ${withdrawalAmount} TON to ${walletAddress}, fee ${withdrawalFee} TON`);
+      if (!user) {
+        await updateTransactionStatus(transactionId, 'failed');
+        return res.status(404).json({ error: "User not found" });
+      }
 
-      // Возвращаем обновленные данные пользователя
-      db.get("SELECT * FROM users WHERE id = ?", [userId], (err, updatedUser) => {
-        if (err || !updatedUser) {
-          console.error("❌ Failed to fetch updated user:", err);
-          return res.status(500).json({ error: "Failed to fetch updated user" });
+      const totalCost = withdrawalAmount + withdrawalFee;
+
+      if (user.balance < totalCost) {
+        await updateTransactionStatus(transactionId, 'failed');
+        return res.status(400).json({
+          error: `Недостаточно средств. Требуется: ${totalCost.toFixed(4)} TON (включая комиссию ${withdrawalFee} TON)`
+        });
+      }
+
+      // Списываем средства с баланса пользователя
+      db.run("UPDATE users SET balance = balance - ? WHERE id = ?", [totalCost, userId], async function (err2) {
+        if (err2) {
+          console.error("❌ Failed to update balance:", err2);
+          await updateTransactionStatus(transactionId, 'failed');
+          return res.status(500).json({ error: "Database error: " + err2.message });
         }
 
-        try {
-          updatedUser.gifts = JSON.parse(updatedUser.gifts || "[]");
-        } catch (e) {
-          updatedUser.gifts = [];
-        }
+        // Обновляем статус транзакции
+        await updateTransactionStatus(transactionId, 'completed');
 
-        console.log(`✅ Updated user balance: ${updatedUser.balance}`);
-        res.json({
-          success: true,
-          user: updatedUser,
-          withdrawalAmount: withdrawalAmount,
-          fee: withdrawalFee,
-          totalCost: totalCost
+        console.log(`✅ User ${userId} withdrew ${withdrawalAmount} TON to ${walletAddress}, fee ${withdrawalFee} TON`);
+
+        // Возвращаем обновленные данные пользователя
+        db.get("SELECT * FROM users WHERE id = ?", [userId], (err, updatedUser) => {
+          if (err || !updatedUser) {
+            console.error("❌ Failed to fetch updated user:", err);
+            return res.status(500).json({ error: "Failed to fetch updated user" });
+          }
+
+          try {
+            updatedUser.gifts = JSON.parse(updatedUser.gifts || "[]");
+          } catch (e) {
+            updatedUser.gifts = [];
+          }
+
+          console.log(`✅ Updated user balance: ${updatedUser.balance}`);
+          res.json({
+            success: true,
+            user: updatedUser,
+            withdrawalAmount: withdrawalAmount,
+            fee: withdrawalFee,
+            totalCost: totalCost,
+            transactionId: transactionId
+          });
         });
       });
     });
-  });
+
+  } catch (error) {
+    console.error("❌ Withdrawal processing error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
+// Добавляем новый endpoint для получения истории транзакций пользователя
+app.get("/api/user/:id/transactions", async (req, res) => {
+  const { id } = req.params;
+  const { limit = 50, offset = 0 } = req.query;
+
+  if (!id || isNaN(parseInt(id))) {
+    return res.status(400).json({ error: "Invalid user ID" });
+  }
+
+  const db = await dbPool.getConnection();
+
+  try {
+    const transactions = await new Promise((resolve, reject) => {
+      db.all(`
+        SELECT id, type, amount, fee, status, created_at, completed_at, wallet_address
+        FROM transactions 
+        WHERE user_id = ? 
+        ORDER BY created_at DESC 
+        LIMIT ? OFFSET ?
+      `, [parseInt(id), parseInt(limit), parseInt(offset)], (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    });
+
+    // Подсчет общего количества транзакций
+    const total = await new Promise((resolve, reject) => {
+      db.get("SELECT COUNT(*) as count FROM transactions WHERE user_id = ?", [parseInt(id)], (err, row) => {
+        if (err) reject(err);
+        else resolve(row.count);
+      });
+    });
+
+    res.json({
+      transactions,
+      total,
+      limit: parseInt(limit),
+      offset: parseInt(offset)
+    });
+
+  } catch (error) {
+    console.error("Failed to get transactions:", error);
+    res.status(500).json({ error: "Database error" });
+  } finally {
+    dbPool.releaseConnection(db);
+  }
+});
+
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "index.html"));
+});
+
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "public/index.html"));
+});
+
+// Graceful shutdown
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);
+
+async function gracefulShutdown(signal) {
+  console.log(`\n🛑 Received ${signal}. Starting graceful shutdown...`);
+
+  try {
+    // Закрываем все соединения с базой данных
+    await dbPool.closeAll();
+    console.log("✅ Database connections closed");
+
+    // Очищаем все таймеры
+    if (rouletteWaitingTimer) clearTimeout(rouletteWaitingTimer);
+    if (rouletteBettingTimer) clearTimeout(rouletteBettingTimer);
+    if (rouletteWaitingInterval) clearInterval(rouletteWaitingInterval);
+    if (rouletteBettingInterval) clearInterval(rouletteBettingInterval);
+
+    console.log("✅ Graceful shutdown completed");
+    process.exit(0);
+  } catch (error) {
+    console.error("❌ Error during graceful shutdown:", error);
+    process.exit(1);
+  }
+}
+
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
+
+const server = app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
   startCrashLoop();
   resetRouletteRound();
+});
+
+// Настройка для graceful shutdown
+server.on('close', () => {
+  console.log('📡 HTTP server closed');
 });
