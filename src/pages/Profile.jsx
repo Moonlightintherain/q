@@ -3,7 +3,6 @@ import { useTonConnectUI, useTonWallet } from '@tonconnect/ui-react';
 import { config } from '../config';
 import { DebugModal } from '../components/DebugModal';
 import { useSmartLogger } from '../hooks/useSmartLogger';
-import { config } from '../config';
 
 const API = config.apiUrl;
 
@@ -65,7 +64,7 @@ export default function Profile({ userId, user, setUser }) {
   const [isDepositing, setIsDepositing] = useState(false);
   const [withdrawalAmount, setWithdrawalAmount] = useState('');
   const [isWithdrawing, setIsWithdrawing] = useState(false);
-  const [showWithdrawal, setShowWithdrawal] = useState(false);
+  const [activeAction, setActiveAction] = useState(null); // null | "deposit" | "withdraw"
 
   // Smart logger (автоматически включается/отключается через config)
   const { debugData, logInfo, logSuccess, logError, logWarning, showDebug, closeDebug, clearLogs } = useSmartLogger();
@@ -289,7 +288,7 @@ export default function Profile({ userId, user, setUser }) {
       }
 
       setWithdrawalAmount('');
-      setShowWithdrawal(false);
+      setActiveAction(null);
 
       logSuccess(`✅ Вывод завершен: ${amount} TON выведено на кошелек`);
       showDebug('Вывод средств успешно выполнен');
@@ -385,20 +384,21 @@ export default function Profile({ userId, user, setUser }) {
       <div className="flex-none mb-8">
         <div className="glass-card p-6 text-center">
           <div className="text-sm text-gray-400 mb-2">Текущий баланс</div>
-          <div className="text-4xl font-bold neon-accent mb-4">
-            {formatTon(user.balance)}
+          <div className="text-4xl font-bold neon-accent mb-4 flex items-center justify-center">
+            <span>{formatTon(user.balance)}</span>
             <Ton className="w-8 h-8 ml-2" />
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={handleRefresh}
-              className="neon-btn neon-btn-green px-6 py-2 text-sm"
-              disabled={loading}
-            >
-              {loading ? "Обновление..." : "Обновить баланс"}
-            </button>
-            {/* Кнопка для просмотра конфигурации - добавить в секцию с кнопками */}
-            {config.debugMode && (
+          {config.debugMode && (
+            <div className="flex gap-2">
+              <button
+                onClick={handleRefresh}
+                className="neon-btn neon-btn-green px-6 py-2 text-sm"
+                disabled={loading}
+              >
+                {loading ? "Обновление..." : "Обновить баланс"}
+              </button>
+              {/* Кнопка для просмотра конфигурации - добавить в секцию с кнопками */}
+
               <button
                 onClick={() => {
                   clearLogs();
@@ -416,77 +416,97 @@ export default function Profile({ userId, user, setUser }) {
               >
                 🔧 Debug: Конфигурация
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Кнопки пополнения и вывода */}
       <div className="flex-1 flex flex-col justify-end">
         <div className="space-y-4">
-          {!wallet ? (
-            <button
-              onClick={() => tonConnectUI.openModal()}
-              className="neon-btn neon-btn-green w-full py-4 text-lg font-semibold"
-            >
-              🔗 Подключить кошелек
-            </button>
-          ) : (
-            <div className="glass-card p-4 mb-4">
-              <div className="text-sm text-gray-400 mb-2">Подключен кошелек:</div>
-              <div className="text-xs neon-text mb-4">
-                {wallet.account.address.slice(0, 6)}...{wallet.account.address.slice(-6)}
-              </div>
-
-              <div className="mb-4">
-                <input
-                  type="number"
-                  value={depositAmount}
-                  onChange={(e) => setDepositAmount(e.target.value)}
-                  placeholder="Введите сумму TON"
-                  className="input-neon mb-3"
-                  step="0.01"
-                  min="0.01"
-                />
-              </div>
-
+          <div className="glass-card p-4 mb-4">
+            {!wallet ? (
               <button
-                onClick={handleDeposit}
-                disabled={isDepositing || !depositAmount || parseFloat(depositAmount) < 0.01}
-                className="neon-btn neon-btn-green w-full py-3 text-base font-semibold mb-2"
+                onClick={() => tonConnectUI.openModal()}
+                className="neon-btn neon-btn-green w-full py-3 text-base font-semibold"
               >
-                {isDepositing ? "Отправка..." : `💰 Пополнить на ${depositAmount || '0'} TON`}
+                🔗 Подключить кошелек
               </button>
+            ) : (
+              <>
+                <div className="text-sm text-gray-400 mb-2">Подключен кошелек:</div>
+                <div className="text-xs neon-text mb-4">
+                  {wallet.account.address.slice(0, 6)}...{wallet.account.address.slice(-6)}
+                </div>
+                <button
+                  onClick={() => tonConnectUI.disconnect()}
+                  className="neon-btn w-full py-2 text-sm"
+                >
+                  🔌 Отключить кошелек
+                </button>
+              </>
+            )}
+          </div>
 
+          {activeAction === null && wallet && (
+            <div className="flex gap-2">
               <button
-                onClick={() => tonConnectUI.disconnect()}
-                className="neon-btn w-full py-2 text-sm"
+                onClick={() => setActiveAction("deposit")}
+                className="neon-btn neon-btn-green flex-1 py-3 text-base font-semibold"
               >
-                🔌 Отключить кошелек
+                💰 Пополнить
+              </button>
+              <button
+                onClick={() => setActiveAction("withdraw")}
+                className="neon-btn neon-btn-pink flex-1 py-3 text-base font-semibold"
+                disabled={user.balance < config.minWithdrawal}
+              >
+                💸 Вывести
               </button>
             </div>
           )}
 
-          {!showWithdrawal ? (
-            <button 
-              onClick={() => setShowWithdrawal(true)}
-              className="neon-btn neon-btn-pink w-full py-4 text-lg font-semibold"
-              disabled={!wallet || user.balance < config.minWithdrawal}
-            >
-              💸 Вывести средства
-            </button>
-          ) : (
+          {activeAction === "deposit" && (
             <div className="glass-card p-4">
-              <div className="text-lg font-bold neon-accent mb-4">Вывод средств</div>
+              <div className="text-lg font-bold neon-accent mb-4">Пополнение баланса</div>
+              <div className="text-sm text-gray-400 mb-2">Минимальная сумма: 0.01 TON</div>
+              <input
+                type="number"
+                value={depositAmount}
+                onChange={(e) => setDepositAmount(e.target.value)}
+                placeholder="Введите сумму"
+                className="input-neon mb-3"
+                step="0.01"
+                min="0.01"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={handleDeposit}
+                  disabled={isDepositing || !depositAmount || parseFloat(depositAmount) < 0.01}
+                  className="neon-btn neon-btn-green flex-1 py-3 text-base font-semibold"
+                >
+                  {isDepositing ? "Обработка..." : "Пополнить"}
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveAction(null);
+                    setDepositAmount('');
+                  }}
+                  className="neon-btn px-6 py-3"
+                  disabled={isDepositing}
+                >
+                  Отмена
+                </button>
+              </div>
+            </div>
+          )}
 
+          {activeAction === "withdraw" && (
+            <div className="glass-card p-4">
+              <div className="text-lg font-bold neon-accent mb-4">Вывод баланса</div>
               <div className="text-sm text-gray-400 mb-2">
-                Минимум: {config.minWithdrawal} TON, Комиссия: {config.withdrawalFee} TON
+                Минимум: {config.minWithdrawal} TON, Максимум: {user.balance} TON
               </div>
-
-              <div className="text-sm text-gray-300 mb-4">
-                Доступно к выводу: {Math.max(0, user.balance - config.withdrawalFee).toFixed(4)} TON
-              </div>
-          
               <input
                 type="number"
                 value={withdrawalAmount}
@@ -495,27 +515,19 @@ export default function Profile({ userId, user, setUser }) {
                 className="input-neon mb-3"
                 step="0.01"
                 min={config.minWithdrawal}
-                max={Math.max(0, user.balance - config.withdrawalFee)}
+                max={user.balance}
               />
-
-              <div className="text-xs text-gray-400 mb-4">
-                {withdrawalAmount && !isNaN(parseFloat(withdrawalAmount)) && (
-                  <>К выводу: {withdrawalAmount} TON + комиссия {config.withdrawalFee} TON = {(parseFloat(withdrawalAmount) + config.withdrawalFee).toFixed(4)} TON</>
-                )}
-              </div>
-              
               <div className="flex gap-2">
                 <button
                   onClick={handleWithdraw}
-                  disabled={isWithdrawing || !withdrawalAmount || parseFloat(withdrawalAmount) < config.minWithdrawal || (parseFloat(withdrawalAmount) + config.withdrawalFee) > user.balance}
+                  disabled={isWithdrawing || !withdrawalAmount || parseFloat(withdrawalAmount) < config.minWithdrawal || parseFloat(withdrawalAmount) > user.balance}
                   className="neon-btn neon-btn-pink flex-1 py-3 text-base font-semibold"
                 >
-                  {isWithdrawing ? "Обработка..." : "💸 Вывести"}
+                  {isWithdrawing ? "Обработка..." : "Вывести"}
                 </button>
-
                 <button
                   onClick={() => {
-                    setShowWithdrawal(false);
+                    setActiveAction(null);
                     setWithdrawalAmount('');
                   }}
                   className="neon-btn px-6 py-3"
