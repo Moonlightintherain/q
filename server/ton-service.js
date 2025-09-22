@@ -37,7 +37,7 @@ class TonService {
 
       this.wallet = this.client.open(this.walletContract);
       this.keyPair = keyPair;
-      
+
       this.isInitialized = true;
       console.log('✅ TON Service initialized successfully');
       console.log(`💼 Casino wallet address: ${this.walletContract.address.toString()}`);
@@ -81,7 +81,7 @@ class TonService {
       // Отправляем транзакцию
       console.log('📤 Sending transaction...');
       const result = await this.wallet.send(transfer);
-      
+
       console.log('✅ Transaction sent successfully');
       console.log(`🔗 Transaction hash: ${result.hash().toString('hex')}`);
 
@@ -97,6 +97,16 @@ class TonService {
       const transactionHash = result.hash().toString('hex');
       console.log('✅ Transaction confirmed!');
       console.log(`🔗 Final transaction hash: ${transactionHash}`);
+
+      // Дополнительная диагностика
+      console.log('🔍 Transaction result details:', {
+        hash: transactionHash,
+        seqno: seqno,
+        amount: amountTon,
+        resultExists: !!result,
+        hashExists: !!result.hash,
+        hashType: typeof result.hash
+      });
 
       return {
         success: true,
