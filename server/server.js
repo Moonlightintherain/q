@@ -840,37 +840,37 @@ app.post("/api/roulette/bet", (req, res) => {
 // Endpoint для обработки депозитов
 app.post("/api/user/deposit", (req, res) => {
   console.log('💰 Received deposit request:', req.body);
-  
+
   const { userId, amount, transactionHash } = req.body;
-  
+
   if (!userId || !amount || amount <= 0) {
     console.log('❌ Invalid deposit data:', { userId, amount, transactionHash });
     return res.status(400).json({ error: "Invalid deposit data" });
   }
-  
+
   // Можно добавить дополнительную проверку транзакции здесь
   console.log(`💰 Processing deposit: User ${userId}, Amount ${amount} TON, TX: ${transactionHash}`);
-  
-  db.run("UPDATE users SET balance = balance + ? WHERE id = ?", [amount, userId], function(err) {
+
+  db.run("UPDATE users SET balance = balance + ? WHERE id = ?", [amount, userId], function (err) {
     if (err) {
       console.error("❌ Failed to update balance:", err);
       return res.status(500).json({ error: "Database error: " + err.message });
     }
-    
+
     console.log(`✅ User ${userId} deposited ${amount} TON`);
-    
+
     db.get("SELECT * FROM users WHERE id = ?", [userId], (err, user) => {
       if (err || !user) {
         console.error("❌ Failed to fetch updated user:", err);
         return res.status(500).json({ error: "Failed to fetch updated user" });
       }
-      
+
       try {
         user.gifts = JSON.parse(user.gifts || "[]");
       } catch (e) {
         user.gifts = [];
       }
-      
+
       console.log(`✅ Updated user balance: ${user.balance}`);
       res.json({ success: true, user });
     });
@@ -1027,6 +1027,83 @@ function startCrashLoop() {
 
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "..", "index.html"));
+});
+
+// Endpoint для обработки выводов
+app.post("/api/user/withdraw", (req, res) => {
+  console.log('💸 Received withdrawal request:', req.body);
+
+  const { userId, amount, walletAddress } = req.body;
+
+  if (!userId || !amount || amount <= 0 || !walletAddress) {
+    console.log('❌ Invalid withdrawal data:', { userId, amount, walletAddress });
+    return res.status(400).json({ error: "Invalid withdrawal data" });
+  }
+
+  const withdrawalAmount = Number(amount);
+  const withdrawalFee = Number(process.env.WITHDRAWAL_FEE);
+  const minWithdrawal = Number(process.env.MIN_WITHDRAWAL);
+
+  if (withdrawalAmount < minWithdrawal) {
+    return res.status(400).json({
+      error: `Минимальная сумма вывода: ${minWithdrawal} TON`
+    });
+  }
+
+  console.log(`💸 Processing withdrawal: User ${userId}, Amount ${withdrawalAmount} TON, Fee ${withdrawalFee} TON, To: ${walletAddress}`);
+
+  db.get("SELECT * FROM users WHERE id = ?", [userId], (err, user) => {
+    if (err) {
+      console.error("❌ Failed to get user:", err);
+      return res.status(500).json({ error: "Database error: " + err.message });
+    }
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const totalCost = withdrawalAmount + withdrawalFee;
+
+    if (user.balance < totalCost) {
+      return res.status(400).json({
+        error: `Недостаточно средств. Требуется: ${totalCost.toFixed(4)} TON (включая комиссию ${withdrawalFee} TON)`
+      });
+    }
+
+    // Списываем средства с баланса пользователя
+    db.run("UPDATE users SET balance = balance - ? WHERE id = ?", [totalCost, userId], function (err2) {
+      if (err2) {
+        console.error("❌ Failed to update balance:", err2);
+        return res.status(500).json({ error: "Database error: " + err2.message });
+      }
+
+      // Добавляем комиссию к балансу казино (ID = 0)
+      console.log(`✅ User ${userId} withdrew ${withdrawalAmount} TON to ${walletAddress}, fee ${withdrawalFee} TON`);
+
+      // Возвращаем обновленные данные пользователя
+      db.get("SELECT * FROM users WHERE id = ?", [userId], (err, updatedUser) => {
+        if (err || !updatedUser) {
+          console.error("❌ Failed to fetch updated user:", err);
+          return res.status(500).json({ error: "Failed to fetch updated user" });
+        }
+
+        try {
+          updatedUser.gifts = JSON.parse(updatedUser.gifts || "[]");
+        } catch (e) {
+          updatedUser.gifts = [];
+        }
+
+        console.log(`✅ Updated user balance: ${updatedUser.balance}`);
+        res.json({
+          success: true,
+          user: updatedUser,
+          withdrawalAmount: withdrawalAmount,
+          fee: withdrawalFee,
+          totalCost: totalCost
+        });
+      });
+    });
+  });
 });
 
 const PORT = process.env.PORT || 4000;
