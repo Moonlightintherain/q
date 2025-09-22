@@ -1251,6 +1251,13 @@ app.post("/api/user/withdraw", async (req, res) => {
 
     console.log(`💸 Processing withdrawal: User ${userId}, Amount ${withdrawalAmount} TON, Fee ${withdrawalFee} TON, To: ${walletAddress}`);
 
+    // Отправляем уведомление о начале обработки
+    try {
+      await telegramBot.sendWithdrawalStartNotification(userId, withdrawalAmount, walletAddress);
+    } catch (telegramError) {
+      console.error('❌ Failed to send start notification:', telegramError);
+    }
+
     db.get("SELECT * FROM users WHERE id = ?", [userId], async (err, user) => {
       if (err) {
         console.error("❌ Failed to get user:", err);
@@ -1285,30 +1292,42 @@ app.post("/api/user/withdraw", async (req, res) => {
         try {
           // Выполняем реальную транзакцию в сети TON
           const tonResult = await tonService.sendTransaction(
-            walletAddress, 
-            withdrawalAmount, 
+            walletAddress,
+            withdrawalAmount,
             `Withdrawal for user ${userId}`
           );
 
           if (tonResult.success) {
-            // Обновляем статус транзакции с реальным хешем
-            await db.run("UPDATE transactions SET transaction_hash = ?, status = ? WHERE id = ?", 
-              [tonResult.hash, 'completed', transactionId]);
+            const transactionHash = tonResult.hash || tonResult.transactionId || withdrawalHash;
 
-            console.log(`✅ TON transaction successful: ${tonResult.hash}`);
+            // Обновляем статус транзакции с реальным хешем
+            await db.run("UPDATE transactions SET transaction_hash = ?, status = ? WHERE id = ?",
+              [transactionHash, 'completed', transactionId]);
+
+            console.log(`✅ TON transaction successful: ${transactionHash}`);
 
             // Отправляем уведомление в Telegram
             try {
               await telegramBot.sendWithdrawalNotification(
-                userId, 
-                withdrawalAmount, 
-                tonResult.hash, 
+                userId,
+                withdrawalAmount,
+                transactionHash,
                 walletAddress
               );
               console.log('📱 Telegram notification sent');
             } catch (telegramError) {
               console.error('❌ Failed to send Telegram notification:', telegramError);
-              // Не прерываем выполнение, если уведомление не отправилось
+              // Отправляем уведомление об ошибке отправки уведомления
+              try {
+                await telegramBot.sendErrorNotification(
+                  userId,
+                  'Уведомление о выводе',
+                  `Ошибка отправки уведомления: ${telegramError.message}`,
+                  { timestamp: Math.floor(Date.now() / 1000), transactionId, userId, amount: withdrawalAmount }
+                );
+              } catch (secondaryError) {
+                console.error('❌ Failed to send error notification:', secondaryError);
+              }
             }
 
             // Возвращаем успешный результат
@@ -1338,64 +1357,67 @@ app.post("/api/user/withdraw", async (req, res) => {
             });
 
           } else {
-            // Транзакция TON не удалась - возвращаем средства пользователю
+            // Транзакция TON не удалась - НЕ возвращаем средства пользователю
             console.error(`❌ TON transaction failed: ${tonResult.error}`);
-            
-            db.run("UPDATE users SET balance = balance + ? WHERE id = ?", [totalCost, userId], async function (refundErr) {
-              if (refundErr) {
-                console.error("❌ CRITICAL: Failed to refund user balance:", refundErr);
-              } else {
-                console.log("✅ User balance refunded");
-              }
-
-              await updateTransactionStatus(transactionId, 'failed');
-
-              // Отправляем уведомление об ошибке
-              try {
-                await telegramBot.sendErrorNotification(
-                  userId, 
-                  'Вывод средств', 
-                  tonResult.error || 'Ошибка сети TON'
-                );
-              } catch (telegramError) {
-                console.error('❌ Failed to send error notification:', telegramError);
-              }
-
-              return res.status(500).json({ 
-                error: `Ошибка выполнения транзакции: ${tonResult.error || 'Unknown TON error'}`,
-                refunded: !refundErr
-              });
-            });
-          }
-
-        } catch (tonError) {
-          console.error("❌ TON Service error:", tonError);
-          
-          // Возвращаем средства пользователю при ошибке TON
-          db.run("UPDATE users SET balance = balance + ? WHERE id = ?", [totalCost, userId], async function (refundErr) {
-            if (refundErr) {
-              console.error("❌ CRITICAL: Failed to refund user balance:", refundErr);
-            } else {
-              console.log("✅ User balance refunded");
-            }
 
             await updateTransactionStatus(transactionId, 'failed');
 
             // Отправляем уведомление об ошибке
             try {
               await telegramBot.sendErrorNotification(
-                userId, 
-                'Вывод средств', 
-                tonError.message || 'Ошибка подключения к TON'
+                userId,
+                'Вывод средств',
+                tonResult.error || 'Ошибка сети TON',
+                {
+                  timestamp: Math.floor(Date.now() / 1000),
+                  transactionId,
+                  userId,
+                  amount: withdrawalAmount,
+                  fee: withdrawalFee,
+                  walletAddress,
+                  errorCode: 'TON_TRANSACTION_FAILED'
+                }
               );
             } catch (telegramError) {
               console.error('❌ Failed to send error notification:', telegramError);
             }
 
-            return res.status(500).json({ 
-              error: `Ошибка сервиса TON: ${tonError.message}`,
-              refunded: !refundErr
+            return res.status(500).json({
+              error: `Ошибка выполнения транзакции: ${tonResult.error || 'Unknown TON error'}`,
+              refunded: false
             });
+          }
+
+        } catch (tonError) {
+          console.error("❌ TON Service error:", tonError);
+
+          // НЕ возвращаем средства пользователю при ошибке TON
+          await updateTransactionStatus(transactionId, 'failed');
+
+          // Отправляем уведомление об ошибке
+          try {
+            await telegramBot.sendErrorNotification(
+              userId,
+              'Вывод средств',
+              tonError.message || 'Ошибка подключения к TON',
+              {
+                timestamp: Math.floor(Date.now() / 1000),
+                transactionId,
+                userId,
+                amount: withdrawalAmount,
+                fee: withdrawalFee,
+                walletAddress,
+                errorCode: 'TON_SERVICE_ERROR',
+                errorStack: tonError.stack
+              }
+            );
+          } catch (telegramError) {
+            console.error('❌ Failed to send error notification:', telegramError);
+          }
+
+          return res.status(500).json({
+            error: `Ошибка сервиса TON: ${tonError.message}`,
+            refunded: false
           });
         }
       });
@@ -1493,7 +1515,7 @@ const PORT = process.env.PORT || 4000;
 
 const server = app.listen(PORT, async () => {
   console.log(`Server running on http://localhost:${PORT}`);
-  
+
   // Инициализируем TON Service
   try {
     await tonService.initialize();
@@ -1502,7 +1524,7 @@ const server = app.listen(PORT, async () => {
     console.error('❌ Failed to initialize TON Service:', error);
     console.error('⚠️ Withdrawals will not work without TON Service');
   }
-  
+
   startCrashLoop();
   resetRouletteRound();
 });
