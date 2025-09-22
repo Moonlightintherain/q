@@ -63,6 +63,9 @@ export default function Profile({ userId, user, setUser }) {
   const wallet = useTonWallet();
   const [depositAmount, setDepositAmount] = useState('');
   const [isDepositing, setIsDepositing] = useState(false);
+  const [withdrawalAmount, setWithdrawalAmount] = useState('');
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [showWithdrawal, setShowWithdrawal] = useState(false);
 
   // Smart logger (автоматически включается/отключается через config)
   const { debugData, logInfo, logSuccess, logError, logWarning, showDebug, closeDebug, clearLogs } = useSmartLogger();
@@ -206,6 +209,103 @@ export default function Profile({ userId, user, setUser }) {
     } finally {
       setIsDepositing(false);
       logInfo('🏁 Процесс депозита завершен');
+    }
+  };
+
+  // Функция обработки вывода
+  const handleWithdraw = async () => {
+    clearLogs();
+    logInfo('🚀 Начинаем процесс вывода средств');
+
+    // Проверки
+    logInfo('🔍 Проверяем данные:', {
+      hasWallet: !!wallet,
+      walletAddress: wallet?.account?.address,
+      withdrawalAmount,
+      userId,
+      userBalance: user.balance,
+      parsedAmount: parseFloat(withdrawalAmount)
+    });
+
+    if (!wallet) {
+      logError('❌ Кошелек не подключен');
+      showDebug('Ошибка вывода', new Error('Кошелек не подключен'));
+      return;
+    }
+
+    if (!withdrawalAmount || parseFloat(withdrawalAmount) < config.minWithdrawal) {
+      logError('❌ Неверная сумма вывода');
+      showDebug('Ошибка вывода', new Error(`Минимальная сумма: ${config.minWithdrawal} TON`));
+      return;
+    }
+
+    const amount = parseFloat(withdrawalAmount);
+    const totalCost = amount + config.withdrawalFee;
+
+    if (totalCost > user.balance) {
+      logError('❌ Недостаточно средств');
+      showDebug('Ошибка вывода', new Error(`Недостаточно средств. Требуется: ${totalCost.toFixed(4)} TON (включая комиссию ${config.withdrawalFee} TON)`));
+      return;
+    }
+
+    setIsWithdrawing(true);
+
+    try {
+      logInfo('📡 Отправляем запрос на вывод...');
+
+      const serverData = {
+        userId: userId,
+        amount: amount,
+        walletAddress: wallet.account.address
+      };
+
+      logInfo('📡 Данные для сервера:', serverData);
+
+      const response = await fetch(`${API}/api/user/withdraw`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(serverData)
+      });
+
+      logInfo('📡 Ответ сервера получен:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
+      });
+
+      const responseData = await response.json();
+      logInfo('📡 Данные ответа:', responseData);
+
+      if (!response.ok) {
+        throw new Error(responseData.error || 'Unknown server error');
+      }
+
+      logSuccess('🎉 Вывод средств успешно обработан!');
+
+      // Обновляем данные пользователя
+      if (responseData.user) {
+        setUser(responseData.user);
+        logInfo('🔄 Данные пользователя обновлены');
+      }
+
+      setWithdrawalAmount('');
+      setShowWithdrawal(false);
+
+      logSuccess(`✅ Вывод завершен: ${amount} TON выведено на кошелек`);
+      showDebug('Вывод средств успешно выполнен');
+
+    } catch (error) {
+      logError('❌ Произошла ошибка:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
+
+      showDebug('Ошибка при выводе средств', error);
+
+    } finally {
+      setIsWithdrawing(false);
+      logInfo('🏁 Процесс вывода завершен');
     }
   };
 
@@ -367,9 +467,65 @@ export default function Profile({ userId, user, setUser }) {
             </div>
           )}
 
-          <button className="neon-btn neon-btn-pink w-full py-4 text-lg font-semibold">
-            💸 Вывести средства
-          </button>
+          {!showWithdrawal ? (
+            <button 
+              onClick={() => setShowWithdrawal(true)}
+              className="neon-btn neon-btn-pink w-full py-4 text-lg font-semibold"
+              disabled={!wallet || user.balance < config.minWithdrawal}
+            >
+              💸 Вывести средства
+            </button>
+          ) : (
+            <div className="glass-card p-4">
+              <div className="text-lg font-bold neon-accent mb-4">Вывод средств</div>
+
+              <div className="text-sm text-gray-400 mb-2">
+                Минимум: {config.minWithdrawal} TON, Комиссия: {config.withdrawalFee} TON
+              </div>
+
+              <div className="text-sm text-gray-300 mb-4">
+                Доступно к выводу: {Math.max(0, user.balance - config.withdrawalFee).toFixed(4)} TON
+              </div>
+          
+              <input
+                type="number"
+                value={withdrawalAmount}
+                onChange={(e) => setWithdrawalAmount(e.target.value)}
+                placeholder={`Мин. ${config.minWithdrawal} TON`}
+                className="input-neon mb-3"
+                step="0.01"
+                min={config.minWithdrawal}
+                max={Math.max(0, user.balance - config.withdrawalFee)}
+              />
+
+              <div className="text-xs text-gray-400 mb-4">
+                {withdrawalAmount && !isNaN(parseFloat(withdrawalAmount)) && (
+                  <>К выводу: {withdrawalAmount} TON + комиссия {config.withdrawalFee} TON = {(parseFloat(withdrawalAmount) + config.withdrawalFee).toFixed(4)} TON</>
+                )}
+              </div>
+              
+              <div className="flex gap-2">
+                <button
+                  onClick={handleWithdraw}
+                  disabled={isWithdrawing || !withdrawalAmount || parseFloat(withdrawalAmount) < config.minWithdrawal || (parseFloat(withdrawalAmount) + config.withdrawalFee) > user.balance}
+                  className="neon-btn neon-btn-pink flex-1 py-3 text-base font-semibold"
+                >
+                  {isWithdrawing ? "Обработка..." : "💸 Вывести"}
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowWithdrawal(false);
+                    setWithdrawalAmount('');
+                  }}
+                  className="neon-btn px-6 py-3"
+                  disabled={isWithdrawing}
+                >
+                  Отмена
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
       {/* Debug Modal - показывается только в debug режиме */}
