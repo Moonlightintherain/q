@@ -7,6 +7,10 @@ export const config = {
   appDomain: import.meta.env.VITE_APP_DOMAIN || "http://localhost:3000",
   casinoWalletAddress: import.meta.env.VITE_CASINO_WALLET_ADDRESS,
   
+  // Настройки вывода средств
+  minWithdrawal: parseFloat(import.meta.env.VITE_MIN_WITHDRAWAL),
+  withdrawalFee: parseFloat(import.meta.env.VITE_WITHDRAWAL_FEE),
+  
   // Отладка (установите false для отключения DebugModal)
   debugMode: import.meta.env.VITE_DEBUG_MODE !== 'false', // по умолчанию включена
   
