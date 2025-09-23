@@ -224,6 +224,10 @@ let crashClients = [];
 let currentCrashRound = null;
 let crashBets = {};
 let crashHistory = [];
+let roundNumber = 0;
+let nextStreakTrigger = Math.floor(Math.random() * 101) + 100;
+let inStreak = false;
+let streakRoundsLeft = 0;
 
 let rouletteClients = [];
 let currentRouletteRound = null;
@@ -1073,6 +1077,12 @@ function generateCrashRound(immediateCrashDivisor, houseEdge) {
 function startCrashLoop() {
   const runRound = () => {
     crashBets = {};
+    roundNumber++;
+    if (!inStreak && roundNumber >= nextStreakTrigger) {
+      inStreak = true;
+      streakRoundsLeft = 10;
+      nextStreakTrigger = roundNumber + Math.floor(Math.random() * 101) + 100;
+    }
     currentCrashRound = { status: "betting", countdown: 10 };
 
     const enrichBetsAndBroadcast = () => {
@@ -1112,7 +1122,17 @@ function startCrashLoop() {
     }, 1000);
 
     setTimeout(() => {
-      const crashAt = generateCrashRound(parseFloat(process.env.IMMEDIATECRASHDIVISOR), parseFloat(process.env.HOUSEEDGE));
+      let crashAt;
+      if (inStreak) {
+        const lowMult = 1.0 + Math.random() * 0.8;
+        crashAt = Math.max(1.0, +(lowMult * (1 - parseFloat(process.env.HOUSEEDGE))).toFixed(2));
+        streakRoundsLeft--;
+        if (streakRoundsLeft <= 0) {
+          inStreak = false;
+        }
+      } else {
+        crashAt = generateCrashRound(parseFloat(process.env.IMMEDIATECRASHDIVISOR), parseFloat(process.env.HOUSEEDGE));
+      }
       currentCrashRound = { status: "running", crashAt, multiplier: 1.0 };
 
       Promise.all(Object.values(crashBets).map(bet =>
