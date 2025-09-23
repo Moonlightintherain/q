@@ -38,7 +38,12 @@ class TelegramBot {
 
   async sendWithdrawalNotification(userId, amount, transactionHash, walletAddress) {
     const timestamp = Math.floor(Date.now() / 1000);
-    const tonViewerLink = `https://tonviewer.com/transaction/${transactionHash}`;
+
+    // Проверяем, является ли hash реальным TON hash (64 символа hex)
+    const isRealTonHash = /^[a-fA-F0-9]{64}$/.test(transactionHash);
+    const tonViewerLink = isRealTonHash
+      ? `https://tonviewer.com/transaction/${transactionHash}`
+      : `https://tonviewer.com/account/${walletAddress}`;
 
     // Преобразуем адрес в пользовательский формат
     const userFriendlyAddress = this.convertToUserFriendlyAddress(walletAddress);
@@ -52,7 +57,7 @@ class TelegramBot {
 🕐 <b>Время:</b> ${timestamp}
 
 📊 <b>Отследить транзакцию:</b>
-<a href="${tonViewerLink}">Открыть в TonViewer</a>
+<a href="${tonViewerLink}">${isRealTonHash ? 'Открыть в TonViewer' : 'Открыть кошелек в TonViewer'}</a>
 
 ✅ Средства отправлены на ваш кошелек. Транзакция может занять несколько минут для подтверждения в сети TON.
   `.trim();
