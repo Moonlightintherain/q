@@ -1058,7 +1058,7 @@ app.post("/api/user/deposit", async (req, res) => {
   }
 });
 
-function generateCrashRound(immediateCrashDivisor = 50, houseEdge = 0.01) {
+function generateCrashRound(immediateCrashDivisor, houseEdge) {
   if (immediateCrashDivisor && Math.floor(Math.random() * immediateCrashDivisor) === 0) {
     return 1.0;
   }
@@ -1112,7 +1112,7 @@ function startCrashLoop() {
     }, 1000);
 
     setTimeout(() => {
-      const crashAt = generateCrashRound(50, 0.01);
+      const crashAt = generateCrashRound(parseFloat(process.env.IMMEDIATECRASHDIVISOR), parseFloat(process.env.HOUSEEDGE));
       currentCrashRound = { status: "running", crashAt, multiplier: 1.0 };
 
       Promise.all(Object.values(crashBets).map(bet =>
@@ -1216,6 +1216,23 @@ app.get("/api/casino/wallet", async (req, res) => {
   }
 });
 
+// Endpoint для отправки уведомления о начале вывода
+app.post("/api/user/withdraw-start", async (req, res) => {
+  const { userId, amount, walletAddress } = req.body;
+
+  try {
+    await telegramBot.sendWithdrawalStartNotification(
+      userId,
+      amount,
+      walletAddress
+    );
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Failed to send start notification:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Endpoint для обработки выводов
 app.post("/api/user/withdraw", async (req, res) => {
   console.log('💸 Received withdrawal request:', req.body);
@@ -1298,20 +1315,39 @@ app.post("/api/user/withdraw", async (req, res) => {
           );
 
           if (tonResult.success) {
-            const transactionHash = tonResult.hash || tonResult.transactionId || withdrawalHash;
+            // Используем реальный hash если есть, иначе временный
+            const finalTransactionHash = tonResult.realHash || tonResult.hash || tonResult.transactionId || withdrawalHash;
 
-            // Обновляем статус транзакции с реальным хешем
-            await db.run("UPDATE transactions SET transaction_hash = ?, status = ? WHERE id = ?",
-              [transactionHash, 'completed', transactionId]);
+            console.log('💾 Сохраняем hash в базу:', {
+              realHash: tonResult.realHash,
+              tempHash: tonResult.tempHash,
+              finalHash: finalTransactionHash,
+              hasRealHash: !!tonResult.realHash
+            });
 
-            console.log(`✅ TON transaction successful: ${transactionHash}`);
+            // Обновляем статус транзакции с финальным хешем
+            try {
+              await new Promise((resolve, reject) => {
+                db.run("UPDATE transactions SET transaction_hash = ?, status = ? WHERE id = ?",
+                  [finalTransactionHash, 'completed', transactionId], function (err) {
+                    if (err) reject(err);
+                    else resolve();
+                  });
+              });
+              console.log(`✅ Transaction ${transactionId} updated with hash: ${finalTransactionHash}`);
+            } catch (dbError) {
+              console.error('❌ Failed to update transaction hash:', dbError);
+              // Если не удалось обновить hash, все равно продолжаем
+            }
+
+            console.log(`✅ TON transaction successful: ${finalTransactionHash}`);
 
             // Отправляем уведомление в Telegram
             try {
               await telegramBot.sendWithdrawalNotification(
                 userId,
                 withdrawalAmount,
-                transactionHash,
+                finalTransactionHash,  // <- исправлено
                 walletAddress
               );
               console.log('📱 Telegram notification sent');
