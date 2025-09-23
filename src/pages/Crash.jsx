@@ -19,9 +19,9 @@ function Ton({ className = "inline-block w-4 h-4 ml-1 align-middle", alt = "TON"
 function UserAvatar({ user, size = "w-8 h-8" }) {
   if (user?.photo_url) {
     return (
-      <img 
-        src={user.photo_url} 
-        alt={user.first_name || 'User'} 
+      <img
+        src={user.photo_url}
+        alt={user.first_name || 'User'}
         className={`${size} rounded-full object-cover border-2 border-cyan-400/30`}
         onError={(e) => {
           e.target.style.display = 'none';
@@ -30,7 +30,7 @@ function UserAvatar({ user, size = "w-8 h-8" }) {
       />
     );
   }
-  
+
   const initials = (user?.first_name?.[0] || '') + (user?.last_name?.[0] || '');
   return (
     <div className={`${size} rounded-full bg-gradient-to-br from-cyan-500 to-pink-500 flex items-center justify-center text-white font-bold text-sm border-2 border-cyan-400/30`}>
@@ -52,7 +52,7 @@ function getUserDisplayName(user) {
   return `ID ${user?.userId || 'Unknown'}`;
 }
 
-export default function Crash({ userId, user, setUser }){
+export default function Crash({ userId, user, setUser }) {
   const [bet, setBet] = useState("");
   const [status, setStatus] = useState("waiting");
   const [multiplier, setMultiplier] = useState(0.0);
@@ -61,7 +61,7 @@ export default function Crash({ userId, user, setUser }){
   const [bets, setBets] = useState([]);
   const [history, setHistory] = useState([]);
   const evtRef = useRef(null);
-  
+
   const myCurrentBet = useMemo(() => {
     return bets.find((b) => Number(b.userId) === Number(userId));
   }, [bets, userId]);
@@ -70,7 +70,7 @@ export default function Crash({ userId, user, setUser }){
   const sortedBets = useMemo(() => {
     const myBet = bets.find(b => Number(b.userId) === Number(userId));
     const otherBets = bets.filter(b => Number(b.userId) !== Number(userId))
-                          .sort((a, b) => b.amount - a.amount);
+      .sort((a, b) => b.amount - a.amount);
     return myBet ? [myBet, ...otherBets] : otherBets;
   }, [bets, userId]);
 
@@ -148,7 +148,7 @@ export default function Crash({ userId, user, setUser }){
             .then(async (r) => {
               if (r.status === 404) {
                 return fetch(`${API}/api/user/create`, {
-                  method: "POST", 
+                  method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ userId }),
                 });
@@ -157,7 +157,7 @@ export default function Crash({ userId, user, setUser }){
             })
             .then(r => r.json())
             .then(setUser)
-            .catch(() => {});
+            .catch(() => { });
         };
         refreshUser();
       }
@@ -175,7 +175,7 @@ export default function Crash({ userId, user, setUser }){
       } catch (err) {
         return;
       }
-    
+
       if (data.type === "snapshot") {
         setBets(Array.isArray(data.bets) ? data.bets : []);
         setStatus(data.status || "waiting");
@@ -231,7 +231,7 @@ export default function Crash({ userId, user, setUser }){
       }
     };
 
-    es.onerror = () => {};
+    es.onerror = () => { };
 
     return () => {
       es.close();
@@ -273,7 +273,7 @@ export default function Crash({ userId, user, setUser }){
           .then(async (r) => {
             if (r.status === 404) {
               return fetch(`${API}/api/user/create`, {
-                method: "POST", 
+                method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ userId }),
               });
@@ -282,7 +282,7 @@ export default function Crash({ userId, user, setUser }){
           })
           .then(r => r.json())
           .then(setUser)
-          .catch(() => {});
+          .catch(() => { });
       };
       refreshUser();
     });
@@ -298,7 +298,7 @@ export default function Crash({ userId, user, setUser }){
       .then((res) => {
         fetch(`${API}/api/user/${userId}`).then((r) => r.json()).then(setUser);
       })
-      .catch(() => {});
+      .catch(() => { });
   };
 
   if (!user) return <div className="flex-1 flex items-center justify-center"><span className="neon-text">Загрузка...</span></div>;
@@ -351,14 +351,13 @@ export default function Crash({ userId, user, setUser }){
 
         {/* History display */}
         <div className="mt-3 flex gap-1 flex-wrap justify-center max-w-full overflow-hidden">
-          {history.slice(0, 8).map((mult, idx) => (
-            <span 
-              key={idx} 
-              className={`px-2 py-1 rounded glass-card text-xs game-element ${
-                mult >= 2.0 ? 'neon-text-green' : 
-                mult >= 1.5 ? 'text-yellow-400' : 
-                'text-red-400'
-              }`}
+          {history.slice(0, 10).map((mult, idx) => (
+            <span
+              key={idx}
+              className={`px-2 py-1 rounded glass-card text-xs game-element ${mult >= 2.0 ? 'neon-text-green' :
+                  mult >= 1.5 ? 'text-yellow-400' :
+                    'text-red-400'
+                }`}
             >
               {Number(mult).toFixed(2)}x
             </span>
@@ -379,13 +378,12 @@ export default function Crash({ userId, user, setUser }){
               {sortedBets.map((b, i) => {
                 const isMyBet = Number(b.userId) === Number(userId);
                 return (
-                  <div 
-                    key={`${b.userId}-${i}`} 
-                    className={`flex items-center justify-between py-2 px-3 rounded-lg text-sm transition-all ${
-                      isMyBet 
-                        ? "bg-gradient-to-r from-pink-500/10 to-cyan-500/10 border border-pink-500/20" 
+                  <div
+                    key={`${b.userId}-${i}`}
+                    className={`flex items-center justify-between py-2 px-3 rounded-lg text-sm transition-all ${isMyBet
+                        ? "bg-gradient-to-r from-pink-500/10 to-cyan-500/10 border border-pink-500/20"
                         : "bg-[rgba(255,255,255,0.02)] hover:bg-[rgba(255,255,255,0.05)]"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center gap-3">
                       <UserAvatar user={b} size="w-8 h-8" />
@@ -411,37 +409,48 @@ export default function Crash({ userId, user, setUser }){
       <div className="flex-none p-3">
         {!myCurrentBet && (
           <>
-            <input
-              type="number"
-              value={bet}
-              onChange={(e) => setBet(e.target.value)}
-              placeholder="Минимум 0.01 TON"
-              step="0.01"
-              min="0.01"
-              max={user ? user.balance : undefined}
-              className="input-neon w-full mb-3"
-            />
-            <button 
-              onClick={() => placeBet(parseFloat(bet))} 
+            <div className="relative w-full mb-3">
+              <input
+                type="number"
+                value={bet}
+                onChange={(e) => setBet(e.target.value)}
+                placeholder="Минимум 0.01 TON"
+                step="0.01"
+                min="0.01"
+                max={user ? user.balance : undefined}
+                className="input-neon w-full pr-8"
+              />
+              {bet && (
+                <button
+                  type="button"
+                  onClick={() => setBet("")}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            <button
+              onClick={() => placeBet(parseFloat(bet))}
               className="neon-btn neon-btn-pink w-full mb-3"
               disabled={status !== "betting" || !bet || parseFloat(bet) < 0.01 || (user && parseFloat(bet) > user.balance)}
             >
               {status === "betting" ? "Сделать ставку" : "Ставки закрыты"}
             </button>
             <div className="flex gap-2">
-              <button 
+              <button
                 onClick={() => setBet(prev => String(Math.max(0, Number(((parseFloat(prev) || 0) + 0.1).toFixed(2)))))}
                 className="neon-btn neon-btn-yellow flex-1 text-sm"
               >
                 +0.1
               </button>
-              <button 
+              <button
                 onClick={() => setBet(prev => String(Math.max(0, Number(((parseFloat(prev) || 0) + 1).toFixed(2)))))}
                 className="neon-btn neon-btn-yellow flex-1 text-sm"
               >
                 +1
               </button>
-              <button 
+              <button
                 onClick={() => setBet(prev => String(Math.max(0, Number(((parseFloat(prev) || 0) + 10).toFixed(2)))))}
                 className="neon-btn neon-btn-yellow flex-1 text-sm"
               >
