@@ -250,6 +250,23 @@ export default function Profile({ userId, user, setUser }) {
     setIsWithdrawing(true);
 
     try {
+      // Отправляем уведомление о начале обработки СРАЗУ
+      logInfo('📱 Отправляем уведомление о начале вывода...');
+      try {
+        await fetch(`${API}/api/user/withdraw-start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: userId,
+            amount: amount,
+            walletAddress: wallet.account.address
+          })
+        });
+        logSuccess('✅ Уведомление о начале отправлено');
+      } catch (notificationError) {
+        logWarning('⚠️ Не удалось отправить уведомление о начале:', notificationError.message);
+      }
+
       logInfo('📡 Отправляем запрос на вывод...');
 
       const serverData = {
