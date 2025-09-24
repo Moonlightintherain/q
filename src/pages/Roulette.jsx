@@ -353,7 +353,7 @@ export default function Roulette({ userId, user, setUser }) {
       </div>
 
       {/* Список ставок - в стиле Crash */}
-      <div className="flex-1 min-h-0 px-3 mb-2">
+      <div className="flex-1 min-h-0 px-0 mb-2">
         <div className="bg-[rgba(0,0,0,0.45)] rounded-md p-2 border border-[rgba(0,229,255,0.06)] h-full overflow-y-auto">
           {bets.length === 0 ? (
             <div className="text-gray-500 text-sm p-2 text-center">Нет ставок в текущем раунде</div>
@@ -406,7 +406,7 @@ export default function Roulette({ userId, user, setUser }) {
 
       {/* Контролы ставок */}
       {showBetInput && (
-        <div className="flex-none p-3">
+        <div className="flex-none px-0 py-3">
           <input
             type="number"
             value={bet}
