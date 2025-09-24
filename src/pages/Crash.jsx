@@ -369,7 +369,7 @@ export default function Crash({ userId, user, setUser }) {
       </div>
 
       {/* Список ставок - с прокруткой */}
-      <div className="flex-1 min-h-0 px-2">
+      <div className="flex-1 min-h-0 px-0">
         <div className="bg-[rgba(0,0,0,0.45)] rounded-md p-2 border border-[rgba(0,229,255,0.06)] h-full bet-list-container">
           {sortedBets.length === 0 ? (
             <div className="text-gray-500 text-sm p-2 text-center">Нет ставок в текущем раунде</div>
@@ -406,7 +406,7 @@ export default function Crash({ userId, user, setUser }) {
       </div>
 
       {/* Контролы для ставок */}
-      <div className="flex-none p-3">
+      <div className="flex-none px-0 py-3">
         {!myCurrentBet && (
           <>
             <div className="relative w-full mb-3">
