@@ -138,64 +138,56 @@ export default function App() {
 
   return (
     <TonConnectProvider>
-      <div
-        className="flex flex-col w-full"
-        style={{ height: 'var(--tg-viewport-height, 100vh)' }}
-      >
-        {/* Header - адаптирован под fullscreen режим */}
-        <header className="w-full flex items-center justify-between px-4 py-2 bg-gradient-to-r from-transparent to-transparent border-b border-[rgba(0,229,255,0.1)] flex-none">
-          <div className="flex items-center">
-            <TonLogo className="w-6 h-6" />
-            <h1 className="ml-2 text-lg font-bold neon-text">Ton Kazino</h1>
-          </div>
-
-          {/* Баланс в правом верхнем углу */}
-          {user && !user.error && (
-            <div className="text-right">
-              <div className="text-xs text-gray-400">Баланс</div>
-              <div className="text-sm neon-accent">
-                {user.balance ? Number(user.balance).toFixed(4).replace(/\.?0+$/, '') : '0'} <TonLogo className="w-3 h-3 inline" />
-              </div>
-            </div>
-          )}
-        </header>
-
-        {/* Main content area - занимает всю доступную высоту */}
-        <main className="flex-1 flex flex-col min-h-0 w-full overflow-hidden">
-          <div className="glass-card m-2 p-3 flex-1 flex flex-col min-h-0 overflow-y-auto">
-            {loadingAuth ? (
-              <div className="flex-1 flex items-center justify-center">
-                <span className="neon-text">Авторизация...</span>
-              </div>
-            ) : user && user.error ? (
-              <div className="flex-1 flex items-center justify-center">
-                <span className="text-red-400">{user.error}</span>
-              </div>
-            ) : !user ? (
-              <div className="flex-1 flex items-center justify-center">
-                <span className="text-red-400">Ошибка загрузки пользователя</span>
-              </div>
-            ) : (
-              <>
-                {activePage === "crash" && (
-                  <Crash userId={userId} user={user} setUser={setUser} />
-                )}
-                {activePage === "roulette" && (
-                  <Roulette userId={userId} user={user} setUser={setUser} />
-                )}
-                {activePage === "profile" && (
-                  <Profile userId={userId} user={user} setUser={setUser} />
-                )}
-              </>
-            )}
-          </div>
-        </main>
-
-        {/* Bottom menu - закреплено внизу */}
-        <div className="flex-none w-full">
-          <BottomMenu activePage={activePage} setActivePage={setActivePage} />
-        </div>
+      <div className="flex flex-col w-full min-h-screen" style={{ height: 'var(--tg-viewport-height, 100vh)', paddingBottom: '40px'}}>
+  {/* Header */}
+  <header className="w-full flex flex-col flex-none">
+    <div className="h-[70px]"></div>
+    <div className="w-full flex items-center justify-between px-2 py-2">
+      <div className="flex items-center">
+        <TonLogo className="w-6 h-6" />
+        <h1 className="ml-2 text-lg font-bold neon-text">Ton Kazino</h1>
       </div>
-    </TonConnectProvider>
+      {user && !user.error && (
+        <div className="text-right">
+          <div className="text-xs text-gray-400">Баланс</div>
+          <div className="text-sm neon-accent">
+            {user.balance ? Number(user.balance).toFixed(4).replace(/\.?0+$/, '') : '0'}{' '}
+            <TonLogo className="w-3 h-3 inline" />
+          </div>
+        </div>
+      )}
+    </div>
+  </header>
+
+  {/* Main content */}
+  <main className="flex-1 flex flex-col w-full px-2 pb-2 pt-0 overflow-y-auto">
+    {loadingAuth ? (
+      <div className="flex-1 flex items-center justify-center">
+        <span className="neon-text">Авторизация...</span>
+      </div>
+    ) : user && user.error ? (
+      <div className="flex-1 flex items-center justify-center">
+        <span className="text-red-400">{user.error}</span>
+      </div>
+    ) : !user ? (
+      <div className="flex-1 flex items-center justify-center">
+        <span className="text-red-400">Ошибка загрузки пользователя</span>
+      </div>
+    ) : (
+      <>
+        {activePage === "crash" && <Crash userId={userId} user={user} setUser={setUser} />}
+        {activePage === "roulette" && <Roulette userId={userId} user={user} setUser={setUser} />}
+        {activePage === "profile" && <Profile userId={userId} user={user} setUser={setUser} />}
+      </>
+    )}
+  </main>
+
+  {/* BottomMenu */}
+  <div className="w-full px-2 py-0 flex justify-center flex-none">
+    <BottomMenu activePage={activePage} setActivePage={setActivePage} />
+  </div>
+</div>
+
+    </TonConnectProvider >
   );
 }
