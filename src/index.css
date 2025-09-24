@@ -3,16 +3,18 @@
 @tailwind utilities;
 
 /* --- кастомные стили киберпанк --- */
-:root{
+:root {
   --neon-green: #39ff14;
   --neon-pink: #ff2d95;
   --neon-cyan: #00e5ff;
-  --bg-circle-color: #150a26;
+  --bg-circle-color: #050014;
   --tg-viewport-height: 100vh;
 }
 
 /* Fullscreen mobile optimization */
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
   overflow: hidden;
   margin: 0;
@@ -22,18 +24,19 @@ html, body, #root {
 }
 
 body {
-  @apply bg-gradient-to-br from-cyberBgStart to-cyberBgEnd text-cyan-100;
+  /*@apply bg-gradient-to-br from-cyberBgStart to-cyberBgEnd text-cyan-100;*/
+  background: #050014;
   background-attachment: fixed;
   font-family: 'Orbitron', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  
+
   /* Prevent mobile zoom and scrolling */
   -webkit-text-size-adjust: 100%;
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
-  
+
   /* Ensure proper mobile display */
   position: fixed;
   top: 0;
@@ -43,12 +46,20 @@ body {
   height: var(--tg-viewport-height, 100vh);
 }
 
-/* Telegram safe areas for fullscreen mode */
-@supports (padding-top: env(safe-area-inset-top)) {
-  body {
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
-  }
+html {
+  /*background: linear-gradient(to bottom right, #050014, #0b0024);*/
+  background: #050014;
+  background-attachment: fixed;
+}
+
+/* Добавить также резервный вариант без поддержки env() */
+body {
+  background: #050014;
+  background-attachment: fixed;
+  /* Отступ сверху - изменяй это значение */
+  padding-top: 0px;
+  /* Отступ снизу - изменяй это значение */
+  padding-bottom: 0px;
 }
 
 /* Ensure proper mobile sizing */
@@ -57,101 +68,130 @@ body {
 }
 
 /* фоновая анимация — мягкий движущийся градиент */
-.bg-shift{
-  background: linear-gradient(120deg, rgba(11,0,36,0.6), rgba(10,0,20,0.6));
+.bg-shift {
+  background: linear-gradient(180deg, rgb(0, 0, 0), rgb(20, 0, 47));
   position: absolute;
   inset: 0;
   z-index: -2;
   animation: shift 12s linear infinite;
 }
-@keyframes shift{
-  0%{background-position:0% 50%}
-  50%{background-position:100% 50%}
-  100%{background-position:0% 50%}
+
+@keyframes shift {
+  0% {
+    background-position: 0% 50%
+  }
+
+  50% {
+    background-position: 100% 50%
+  }
+
+  100% {
+    background-position: 0% 50%
+  }
 }
 
 /* декоративный шум */
-.noise:after{
+.noise:after {
   content: "";
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background-image: radial-gradient(rgba(255,255,255,0.02) 1px, transparent 1px);
+  background-image: radial-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px);
   background-size: 2px 2px;
   mix-blend-mode: overlay;
   z-index: -1;
 }
 
 /* стеклянные панели */
-.glass-card{
-  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
-  border: 1px solid rgba(57,255,20,0.08);
+.glass-card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01));
+  border: 1px solid rgba(57, 255, 20, 0.08);
   backdrop-filter: blur(8px) saturate(120%);
   -webkit-backdrop-filter: blur(8px) saturate(120%);
   border-radius: 16px;
-  box-shadow: 0 6px 30px rgba(0,0,0,0.6), 0 0 30px rgba(57,255,20,0.02);
+  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.6), 0 0 30px rgba(57, 255, 20, 0.02);
 }
 
 /* неоновый текст */
-.neon-text{
+.neon-text {
   color: var(--neon-cyan);
-  text-shadow: 0 0 6px rgba(0,229,255,0.55), 0 0 16px rgba(0,229,255,0.25);
+  text-shadow: 0 0 6px rgba(0, 229, 255, 0.55), 0 0 16px rgba(0, 229, 255, 0.25);
 }
-.neon-accent{
+
+.neon-accent {
   color: var(--neon-pink);
-  text-shadow: 0 0 6px rgba(255,45,149,0.45), 0 0 14px rgba(255,45,149,0.18);
+  text-shadow: 0 0 6px rgba(255, 45, 149, 0.45), 0 0 14px rgba(255, 45, 149, 0.18);
 }
+
 .neon-text-green {
   color: #39ff14;
-  text-shadow: 0 0 6px rgba(57,255,20,0.55), 0 0 16px rgba(57,255,20,0.25);
+  text-shadow: 0 0 6px rgba(57, 255, 20, 0.55), 0 0 16px rgba(57, 255, 20, 0.25);
 }
+
 .neon-text-red {
   color: #ff2d95;
-  text-shadow: 0 0 6px rgba(255,45,149,0.55), 0 0 16px rgba(255,45,149,0.25);
+  text-shadow: 0 0 6px rgba(255, 45, 149, 0.55), 0 0 16px rgba(255, 45, 149, 0.25);
 }
 
 /* неоновые кнопки */
-.neon-btn{
+.neon-btn {
   @apply px-4 py-3 rounded-xl font-semibold tracking-wide transition-all;
-  background: linear-gradient(90deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
-  border: 1px solid rgba(255,255,255,0.06);
-  min-height: 44px; /* Touch-friendly minimum */
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01));
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: #00e5ff;
+  /* Светлый неоновый цвет */
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.neon-btn-green{
-  box-shadow: 0 6px 20px rgba(57,255,20,0.08), 0 0 20px rgba(57,255,20,0.12) inset;
-  border-color: rgba(57,255,20,0.18);
-  color: black;
-  background: linear-gradient(90deg, rgba(57,255,20,0.12), rgba(57,255,20,0.06));
+.neon-btn:active {
+  box-shadow: 0 0 15px #00e5ff, 0 0 25px #00e5ff, 0 0 35px #00e5ff;
 }
-.neon-btn-pink{
-  box-shadow: 0 6px 20px rgba(255,45,149,0.08), 0 0 20px rgba(255,45,149,0.12) inset;
-  border-color: rgba(255,45,149,0.18);
-  color: black;
-  background: linear-gradient(90deg, rgba(255,45,149,0.12), rgba(255,45,149,0.06));
+
+.neon-btn-green {
+  color: #39ff14;
+  /* Светлый зеленый */
+  border-color: rgba(57, 255, 20, 0.18);
 }
-.neon-btn-yellow{
-  box-shadow: 0 6px 20px rgba(255,210,0,0.08), 0 0 20px rgba(255,210,0,0.12) inset;
-  border-color: rgba(255,210,0,0.18);
-  color: black;
-  background: linear-gradient(90deg, rgba(255,210,0,0.12), rgba(255,210,0,0.06));
+
+.neon-btn-green:active {
+  box-shadow: 0 0 15px #39ff14, 0 0 25px #39ff14, 0 0 35px #39ff14;
+}
+
+.neon-btn-pink {
+  color: #ff2d95;
+  /* Светлый розовый */
+  border-color: rgba(255, 45, 149, 0.18);
+}
+
+.neon-btn-pink:active {
+  box-shadow: 0 0 15px #ff2d95, 0 0 25px #ff2d95, 0 0 35px #ff2d95;
+}
+
+.neon-btn-yellow {
+  color: #ffd700;
+  /* Светлый желтый */
+  border-color: rgba(255, 210, 0, 0.18);
+}
+
+.neon-btn-yellow:active {
+  box-shadow: 0 0 15px #ffd700, 0 0 25px #ffd700, 0 0 35px #ffd700;
 }
 
 /* нижнее меню - адаптировано для fullscreen */
-.bottom-rail{
-  background: linear-gradient(180deg, rgba(0,0,0,0.45), rgba(0,0,0,0.25));
-  border: 1px solid rgba(0,229,255,0.06);
-  box-shadow: 0 8px 30px rgba(0,0,0,0.6);
-  margin: 8px;
+.bottom-rail {
+  background: rgba(0, 0, 0, 0.45);
+  /*border: 1px solid rgba(0, 229, 255, 0.06);*/
+  /*box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);*/
+  margin-block: 8px;
   border-radius: 16px;
 }
 
 /* multiplier big - увеличенный размер */
-.multiplier{
-  font-size: 4rem;
+.multiplier {
+  font-size: 5rem;
   font-weight: 900;
   letter-spacing: -0.02em;
 }
@@ -163,12 +203,15 @@ body {
 }
 
 /* input styling */
-.input-neon{
-  @apply w-full rounded-lg px-4 py-3 bg-transparent border border-[rgba(255,255,255,0.06)];
+.input-neon {
+  @apply w-full rounded-lg px-4 py-3 bg-transparent border;
+  border-color: rgba(255, 255, 255, 0.06);
   color: var(--neon-cyan);
   outline: none;
-  min-height: 44px; /* Touch-friendly minimum */
-  font-size: 16px; /* Prevent zoom on iOS */
+  min-height: 44px;
+  /* Touch-friendly minimum */
+  font-size: 16px;
+  /* Prevent zoom on iOS */
 }
 
 /* Scrollable containers for bet lists */
@@ -197,7 +240,7 @@ body {
   height: 32px;
   border-radius: 50%;
   object-fit: cover;
-  border: 2px solid rgba(0,229,255,0.3);
+  border: 2px solid rgba(0, 229, 255, 0.3);
 }
 
 /* Balance display in header */
@@ -213,7 +256,12 @@ body {
 }
 
 /* small helpers */
-.row-between{display:flex;justify-content:space-between;align-items:center}
+.row-between {
+  display: flex;
+  justify-content: space-between;
+  align-items: center
+}
+
 .fill-bg-circle {
   fill: var(--bg-circle-color);
 }
@@ -230,13 +278,18 @@ body {
 .loading-spinner {
   width: 24px;
   height: 24px;
-  border: 2px solid rgba(0,229,255,0.3);
+  border: 2px solid rgba(0, 229, 255, 0.3);
   border-top: 2px solid var(--neon-cyan);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
