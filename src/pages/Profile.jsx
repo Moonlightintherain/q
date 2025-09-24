@@ -1,13 +1,16 @@
-import React, { useEffect, useRef, useState, useMemo } from "react";
-import "./Roulette.css";
+import React, { useEffect, useState } from "react";
+import { useTonConnectUI, useTonWallet } from '@tonconnect/ui-react';
+import { config } from '../config';
+import { DebugModal } from '../components/DebugModal';
+import { useSmartLogger } from '../hooks/useSmartLogger';
 
-const API = import.meta.env.VITE_API_URL;
+const API = config.apiUrl;
 
 function formatTon(value) {
   if (value == null) return "0";
   let num = typeof value === "string" ? parseFloat(value.replace(/\s+/g, "").replace(",", ".")) : Number(value);
   if (!isFinite(num)) return "0";
-  let s = num.toFixed(2);
+  let s = num.toFixed(4);
   s = s.replace(/(\.\d*?[1-9])0+$/g, "$1");
   s = s.replace(/\.0+$/g, "");
   return s;
@@ -17,13 +20,13 @@ function Ton({ className = "inline-block w-4 h-4 ml-1 align-middle", alt = "TON"
   return <img src="/ton_logo.svg" alt={alt} className={className} />;
 }
 
-function UserAvatar({ user, size = "w-6 h-6" }) {
+function UserAvatar({ user, size = "w-24 h-24" }) {
   if (user?.photo_url) {
     return (
       <img
         src={user.photo_url}
         alt={user.first_name || 'User'}
-        className={`${size} rounded-full object-cover border border-cyan-400/30`}
+        className={`${size} rounded-full object-cover border-4 border-gradient-to-br from-cyan-500 to-pink-500 shadow-2xl shadow-cyan-500/20`}
         onError={(e) => {
           e.target.style.display = 'none';
           e.target.nextSibling.style.display = 'flex';
@@ -34,7 +37,7 @@ function UserAvatar({ user, size = "w-6 h-6" }) {
 
   const initials = (user?.first_name?.[0] || '') + (user?.last_name?.[0] || '');
   return (
-    <div className={`${size} rounded-full bg-gradient-to-br from-cyan-500 to-pink-500 flex items-center justify-center text-white font-bold text-xs border border-cyan-400/30`}>
+    <div className={`${size} rounded-full bg-gradient-to-br from-cyan-500 to-pink-500 flex items-center justify-center text-white font-bold text-2xl border-4 border-cyan-400/30 shadow-2xl shadow-cyan-500/20`}>
       {initials || '?'}
     </div>
   );
@@ -50,46 +53,282 @@ function getUserDisplayName(user) {
   if (user?.username) {
     return `@${user.username}`;
   }
-  return `ID ${user?.userId || 'Unknown'}`;
+  return `ID ${user?.id || 'Unknown'}`;
 }
 
-// Неоновая палитра для секторов
-const COLORS = ['#ff00ff', '#39ff14', '#00e5ff', '#ff4500', '#ffd700', '#1e90ff'];
+export default function Profile({ userId, user, setUser }) {
+  const [loading, setLoading] = useState(false);
+  const [tonConnectUI] = useTonConnectUI();
+  const wallet = useTonWallet();
+  const [depositAmount, setDepositAmount] = useState('');
+  const [isDepositing, setIsDepositing] = useState(false);
+  const [withdrawalAmount, setWithdrawalAmount] = useState('');
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [activeAction, setActiveAction] = useState(null); // null | "deposit" | "withdraw"
 
-function polarToCartesian(centerX, centerY, radius, angleInDegrees) {
-  const angleInRadians = (angleInDegrees - 90) * Math.PI / 180.0;
-  return {
-    x: centerX + (radius * Math.cos(angleInRadians)),
-    y: centerY + (radius * Math.sin(angleInRadians))
+  // Smart logger (автоматически включается/отключается через config)
+  const { debugData, logInfo, logSuccess, logError, logWarning, showDebug, closeDebug, clearLogs } = useSmartLogger();
+
+  const handleDeposit = async () => {
+    clearLogs(); // Очищаем предыдущие логи
+    logInfo('🚀 Начинаем процесс депозита');
+
+    // Проверки
+    logInfo('🔍 Проверяем данные:', {
+      hasWallet: !!wallet,
+      walletAddress: wallet?.account?.address,
+      depositAmount,
+      userId,
+      parsedAmount: parseFloat(depositAmount)
+    });
+
+    if (!wallet) {
+      logError('❌ Кошелек не подключен');
+      showDebug('Ошибка депозита', new Error('Кошелек не подключен'));
+      return;
+    }
+
+    if (!depositAmount || parseFloat(depositAmount) < 0.01) {
+      logError('❌ Неверная сумма депозита');
+      showDebug('Ошибка депозита', new Error('Минимальная сумма: 0.01 TON'));
+      return;
+    }
+
+    setIsDepositing(true);
+
+    try {
+      const amount = parseFloat(depositAmount);
+      const nanotons = Math.floor(amount * 1e9);
+
+      logSuccess('💰 Рассчитаны суммы:', {
+        tonAmount: amount,
+        nanotons: nanotons
+      });
+
+      const casinoAddress = config.casinoWalletAddress;
+      logInfo('🏦 Адрес казино:', { casinoAddress });
+
+      if (!casinoAddress) {
+        throw new Error('Casino wallet address not configured in .env');
+      }
+
+      const transaction = {
+        validUntil: Math.floor(Date.now() / 1000) + 300,
+        messages: [
+          {
+            address: casinoAddress,
+            amount: nanotons.toString()
+          }
+        ]
+      };
+
+      logInfo('📝 Создана транзакция:', transaction);
+
+      logInfo('📤 Отправляем транзакцию в TON Connect...');
+      const result = await tonConnectUI.sendTransaction(transaction);
+
+      logSuccess('✅ Транзакция отправлена:', {
+        result: result,
+        boc: result?.boc,
+        hash: result?.hash
+      });
+
+      if (result) {
+        logInfo('📡 Отправляем данные на сервер...');
+
+        const serverData = {
+          userId: userId,
+          amount: amount,
+          transactionHash: result.boc || result.hash || JSON.stringify(result)
+        };
+
+        logInfo('📡 Данные для сервера:', serverData);
+
+        const response = await fetch(`${API}/api/user/deposit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(serverData)
+        });
+
+        logInfo('📡 Ответ сервера получен:', {
+          status: response.status,
+          statusText: response.statusText,
+          ok: response.ok
+        });
+
+        const responseData = await response.json();
+        logInfo('📡 Данные ответа:', responseData);
+
+        if (!response.ok) {
+          throw new Error(`Server error: ${response.status} - ${responseData.error || 'Unknown error'}`);
+        }
+
+        logSuccess('🎉 Депозит успешно обработан!');
+
+        // Обновляем данные пользователя
+        logInfo('🔄 Обновляем данные пользователя...');
+        loadUser(userId);
+        setDepositAmount('');
+
+        logSuccess(`✅ Депозит завершен: ${amount} TON добавлено на баланс`);
+        showDebug('Депозит успешно выполнен');
+
+      } else {
+        throw new Error('Транзакция не была отправлена (пользователь отклонил?)');
+      }
+
+    } catch (error) {
+      logError('❌ Произошла ошибка:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
+
+      // Определяем тип ошибки для пользователя
+      let userFriendlyMessage = 'Неизвестная ошибка';
+
+      if (error.message.includes('User declined') || error.message.includes('rejected')) {
+        userFriendlyMessage = 'Транзакция отклонена пользователем';
+        logWarning('⚠️ Пользователь отклонил транзакцию');
+      } else if (error.message.includes('Network') || error.message.includes('fetch')) {
+        userFriendlyMessage = 'Ошибка сети или сервера';
+        logError('🌐 Проблема с сетью или сервером');
+      } else if (error.message.includes('Server error')) {
+        userFriendlyMessage = 'Ошибка сервера';
+        logError('🔥 Ошибка на сервере');
+      } else if (error.message.includes('Casino wallet')) {
+        userFriendlyMessage = 'Ошибка конфигурации кошелька';
+        logError('⚙️ Проблема с конфигурацией');
+      }
+
+      logError(`💔 Итоговое сообщение пользователю: ${userFriendlyMessage}`);
+
+      showDebug('Ошибка при депозите', error);
+
+    } finally {
+      setIsDepositing(false);
+      logInfo('🏁 Процесс депозита завершен');
+    }
   };
-}
 
-function describeArc(x, y, radius, startAngle, endAngle) {
-  const start = polarToCartesian(x, y, radius, endAngle);
-  const end = polarToCartesian(x, y, radius, startAngle);
-  const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
-  return [
-    "M", start.x, start.y,
-    "A", radius, radius, 0, largeArcFlag, 0, end.x, end.y,
-    "L", x, y,
-    "Z"
-  ].join(" ");
-}
+  // Функция обработки вывода
+  const handleWithdraw = async () => {
+    clearLogs();
+    logInfo('🚀 Начинаем процесс вывода средств');
 
-export default function Roulette({ userId, user, setUser }) {
-  const [bet, setBet] = useState("");
-  const [status, setStatus] = useState("waiting");
-  const [countdown, setCountdown] = useState(null);
-  const [countdownType, setCountdownType] = useState(null);
-  const [totalBet, setTotalBet] = useState(0);
-  const [bets, setBets] = useState([]);
-  const [winningDegrees, setWinningDegrees] = useState(0);
-  const [winner, setWinner] = useState(null);
-  const [message, setMessage] = useState("");
-  const evtRef = useRef(null);
-  const wheelRef = useRef(null);
+    // Проверки
+    logInfo('🔍 Проверяем данные:', {
+      hasWallet: !!wallet,
+      walletAddress: wallet?.account?.address,
+      withdrawalAmount,
+      userId,
+      userBalance: user.balance,
+      parsedAmount: parseFloat(withdrawalAmount)
+    });
 
-  const fetchUser = (id) => {
+    if (!wallet) {
+      logError('❌ Кошелек не подключен');
+      showDebug('Ошибка вывода', new Error('Кошелек не подключен'));
+      return;
+    }
+
+    if (!withdrawalAmount || parseFloat(withdrawalAmount) < config.minWithdrawal) {
+      logError('❌ Неверная сумма вывода');
+      showDebug('Ошибка вывода', new Error(`Минимальная сумма: ${config.minWithdrawal} TON`));
+      return;
+    }
+
+    const amount = parseFloat(withdrawalAmount);
+    const totalCost = amount + config.withdrawalFee;
+
+    if (totalCost > user.balance) {
+      logError('❌ Недостаточно средств');
+      showDebug('Ошибка вывода', new Error(`Недостаточно средств. Требуется: ${totalCost.toFixed(4)} TON (включая комиссию ${config.withdrawalFee} TON)`));
+      return;
+    }
+
+    setIsWithdrawing(true);
+
+    try {
+      // Отправляем уведомление о начале обработки СРАЗУ
+      logInfo('📱 Отправляем уведомление о начале вывода...');
+      try {
+        await fetch(`${API}/api/user/withdraw-start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: userId,
+            amount: amount,
+            walletAddress: wallet.account.address
+          })
+        });
+        logSuccess('✅ Уведомление о начале отправлено');
+      } catch (notificationError) {
+        logWarning('⚠️ Не удалось отправить уведомление о начале:', notificationError.message);
+      }
+
+      logInfo('📡 Отправляем запрос на вывод...');
+
+      const serverData = {
+        userId: userId,
+        amount: amount,
+        walletAddress: wallet.account.address
+      };
+
+      logInfo('📡 Данные для сервера:', serverData);
+
+      const response = await fetch(`${API}/api/user/withdraw`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(serverData)
+      });
+
+      logInfo('📡 Ответ сервера получен:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
+      });
+
+      const responseData = await response.json();
+      logInfo('📡 Данные ответа:', responseData);
+
+      if (!response.ok) {
+        throw new Error(responseData.error || 'Unknown server error');
+      }
+
+      logSuccess('🎉 Вывод средств успешно обработан!');
+
+      // Обновляем данные пользователя
+      if (responseData.user) {
+        setUser(responseData.user);
+        logInfo('🔄 Данные пользователя обновлены');
+      }
+
+      setWithdrawalAmount('');
+      setActiveAction(null);
+
+      logSuccess(`✅ Вывод завершен: ${amount} TON выведено на кошелек`);
+      showDebug('Вывод средств успешно выполнен');
+
+    } catch (error) {
+      logError('❌ Произошла ошибка:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
+
+      showDebug('Ошибка при выводе средств', error);
+
+    } finally {
+      setIsWithdrawing(false);
+      logInfo('🏁 Процесс вывода завершен');
+    }
+  };
+
+  const loadUser = (id) => {
+    if (!id) return;
+    setLoading(true);
+
     fetch(`${API}/api/user/${id}`)
       .then(async (r) => {
         if (r.status === 404) {
@@ -100,334 +339,233 @@ export default function Roulette({ userId, user, setUser }) {
           });
         }
         if (!r.ok) {
-          throw new Error(`HTTP ${r.status}: ${await r.text()}`);
+          throw new Error(`HTTP ${r.status}`);
         }
         return r;
       })
       .then(r => r.json())
-      .then(setUser)
+      .then((data) => setUser(data))
       .catch((err) => {
-        console.error("Failed to fetch user:", err);
+        console.error("Failed to load user:", err);
         setUser(null);
-      });
+      })
+      .finally(() => setLoading(false));
   };
 
   useEffect(() => {
-    fetchUser(userId);
-  }, [userId, status]);
-
-  const chartData = useMemo(() => {
-    const sortedBets = bets.slice().sort((a, b) => b.amount - a.amount);
-    if (sortedBets.length === 0) return [];
-
-    const total = sortedBets.reduce((sum, b) => sum + b.amount, 0);
-    let cumulativePercent = 0;
-    return sortedBets.map((b, index) => {
-      const percent = (b.amount / total);
-      const startAngle = cumulativePercent * 360;
-      const endAngle = startAngle + percent * 360;
-      cumulativePercent += percent;
-      return {
-        name: getUserDisplayName(b),
-        value: b.amount,
-        color: COLORS[index % COLORS.length],
-        id: b.userId,
-        percent: (percent * 100).toFixed(1),
-        path: describeArc(200, 200, 160, startAngle, endAngle),
-        isMine: Number(b.userId) === Number(userId),
-        user: b
-      };
-    });
-  }, [bets, userId]);
-
-  const myCurrentBet = useMemo(() => bets.find(b => Number(b.userId) === Number(userId)), [bets, userId]);
-
-  useEffect(() => {
-    const es = new EventSource(`${API}/api/roulette/stream`);
-    evtRef.current = es;
-
-    es.onmessage = (e) => {
-      const data = JSON.parse(e.data);
-      if (data.type === "snapshot") {
-        setBets(data.bets || []);
-        setStatus(data.status);
-        setTotalBet(data.totalBet || 0);
-        setCountdown(data.countdown);
-        setCountdownType(data.countdownType || null);
-        if (data.winningDegrees) setWinningDegrees(data.winningDegrees);
-        if (data.winner) setWinner(data.winner);
-      } else if (data.type === "status") {
-        setStatus(data.status);
-        setCountdown(data.countdown);
-        setCountdownType(data.countdownType || null);
-        setMessage(data.message || "");
-
-        // Всегда обновляем ставки если они есть в сообщении
-        if (data.bets) {
-          setBets(data.bets);
-          setTotalBet(data.totalBet || data.bets.reduce((sum, bet) => sum + bet.amount, 0));
-        }
-
-        // Сброс только при статусе waiting
-        if (data.status === 'waiting') {
-          setBets([]);
-          setTotalBet(0);
-          setWinner(null);
-          setWinningDegrees(0);
-          setCountdown(null);
-          setCountdownType(null);
-          if (wheelRef.current) {
-            wheelRef.current.style.transform = `rotate(0deg)`;
-            wheelRef.current.style.transition = `none`;
-          }
-        }
-      } else if (data.type === "bet") {
-        const incomingBet = data.bet;
-        setBets(prevBets => {
-          const updatedBets = prevBets.map(b => Number(b.userId) === Number(incomingBet.userId) ? incomingBet : b);
-          if (!updatedBets.find(b => Number(b.userId) === Number(incomingBet.userId))) updatedBets.push(incomingBet);
-          return updatedBets;
-        });
-        setTotalBet(data.totalBet);
-        fetchUser(userId);
-      } else if (data.type === "countdown") {
-        setCountdown(data.countdown);
-        setCountdownType(data.countdownType || null);
-      } else if (data.type === "run") {
-        setCountdown(null);
-        setCountdownType(null);
-        setStatus("running");
-        setWinningDegrees(data.winningDegrees);
-        setBets(data.bets);
-        setTotalBet(data.bets.reduce((sum, bet) => sum + bet.amount, 0));
-        setWinner(null);
-        if (wheelRef.current) {
-          wheelRef.current.style.transition = `transform 8s cubic-bezier(0.2, 0.8, 0.5, 1)`;
-          wheelRef.current.style.transform = `rotate(${data.winningDegrees}deg)`;
-        }
-      } else if (data.type === "winner") {
-        setCountdown(null);
-        setCountdownType(null);
-        setWinner(data.winner);
-        setStatus("finished");
-        if (data.winner) {
-          fetchUser(userId);
-        }
-      }
-    };
-
-    return () => es.close();
+    if (userId) loadUser(userId);
   }, [userId]);
 
-  const placeBet = async () => {
-    const amount = parseFloat(bet);
-    if (isNaN(amount) || amount < 0.01) {
-      alert("Минимальная ставка 0.01 TON");
-      return;
-    }
-    if (user && amount > user.balance) {
-      alert("Недостаточно средств");
-      return;
-    }
-
-    const response = await fetch(`${API}/api/roulette/bet`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ userId, amount }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      alert(error.error || 'Ошибка при размещении ставки');
-      return;
-    }
-
-    setBet("");
-    fetchUser(userId);
+  const handleRefresh = () => {
+    if (!userId) return;
+    loadUser(userId);
   };
 
-  const showBetInput = status === "waiting" || status === "waitingForPlayers" || status === "betting";
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="loading-spinner"></div>
+        <span className="ml-3 neon-text">Загрузка профиля...</span>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <span className="text-red-400">Не удалось загрузить профиль</span>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col h-full min-h-0">
-
-      {/* Колесо рулетки */}
-      <div className="flex-none flex justify-center items-center pt-4 pb-2">
-        <div className="relative w-56 h-56 sm:w-64 sm:h-64">
-          {/* Круговой таймер - показывается только для определенных типов */}
-          {countdown && countdown > 0 && countdownType && (
-            <svg className="absolute inset-0 w-full h-full transform -rotate-90 z-10" viewBox="0 0 200 200">
-              <circle
-                cx="100"
-                cy="100"
-                r="98"
-                stroke="rgba(0,229,255,0.1)"
-                strokeWidth="2"
-                fill="none"
-              />
-              <circle
-                cx="100"
-                cy="100"
-                r="98"
-                stroke={countdownType === "waiting" ? "#ffd700" : "#00e5ff"}
-                strokeWidth="2"
-                fill="none"
-                strokeDasharray={`${2 * Math.PI * 98}`}
-                strokeDashoffset={`${2 * Math.PI * 98 * (1 - (countdown / (countdownType === "waiting" ? 60 : 20)))}`}
-                strokeLinecap="round"
-                className="transition-all duration-1000 linear"
-                style={{
-                  filter: `drop-shadow(0 0 5px ${countdownType === "waiting" ? "#ffd700" : "#00e5ff"})`
-                }}
-              />
-            </svg>
-          )}
-          <div className="relative w-full h-full rounded-full glass-card overflow-hidden">
-            <svg viewBox="0 0 400 400" className="w-full h-full transform -rotate-90">
-              <defs>
-                <filter id="inner-neon-glow" x="-50%" y="-50%" width="200%" height="200%">
-                  <feFlood floodColor="#fff" floodOpacity="1" result="color" />
-                  <feMorphology in="SourceAlpha" operator="dilate" radius="2" result="alphaFlood" />
-                  <feComposite in="color" in2="alphaFlood" operator="in" result="glow" />
-                  <feGaussianBlur in="glow" stdDeviation="5" result="blur" />
-                  <feComposite in="SourceGraphic" in2="blur" operator="atop" />
-                </filter>
-              </defs>
-              <g ref={wheelRef} style={{ transformOrigin: "200px 200px" }}>
-                {bets.length > 1 ? (
-                  chartData.map((d, index) => (
-                    <path
-                      key={index}
-                      d={d.path}
-                      fill={d.color}
-                      style={{ filter: d.isMine ? "url(#inner-neon-glow)" : "none" }}
-                      className="transition-all duration-300 ease-out"
-                    />
-                  ))
-                ) : bets.length === 1 ? (
-                  <circle
-                    cx="200"
-                    cy="200"
-                    r="160"
-                    fill={chartData[0]?.color || "#00ffff"}
-                    style={{ filter: "url(#inner-neon-glow)" }}
-                    className="transition-all duration-300 ease-out"
-                  />
-                ) : (
-                  <g>
-                    <circle cx="200" cy="200" r="160" fill="transparent" stroke="#00ffff" strokeWidth="2" strokeDasharray="10" />
-                  </g>
-                )}
-              </g>
-              <circle cx="200" cy="200" r="140" className="fill-bg-circle" />
-            </svg>
-          </div>
-          {/* Указатель */}
-          <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1 z-20">
-            <svg width="30" height="30" viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M15 30 L5 10 L25 10 Z" fill="#fff" filter="drop-shadow(0 0 5px rgba(255,255,255,0.8))" />
-            </svg>
-          </div>
-
-          {/* Центральный текст - увеличенный */}
-          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
-            {bets.length === 0 ? (
-              <div className="text-center">
-                <p className="text-2xl sm:text-3xl neon-text">Ожидание</p>
-                <p className="text-sm sm:text-base neon-text">игроков</p>
-              </div>
-            ) : status === "running" ? (
-              <div className="text-center">
-                <p className="text-2xl sm:text-3xl neon-text">Крутим!</p>
-              </div>
-            ) : (
-              <div className="text-center flex items-center justify-center">
-                <span className="text-2xl sm:text-3xl neon-text font-bold">{formatTon(totalBet)}</span>
-                <Ton className="w-5 h-5 ml-1" />
-              </div>
-            )}
-          </div>
+    <div className="flex flex-col h-full p-6">
+      {/* Аватар и основная информация */}
+      <div className="flex-none text-center mb-8">
+        <div className="flex justify-center mb-4">
+          <UserAvatar user={user} size="w-32 h-32" />
         </div>
+
+        <h2 className="text-2xl font-bold neon-text mb-2">
+          {getUserDisplayName(user)}
+        </h2>
+
+        {user.username && (
+          <p className="text-gray-400 text-sm mb-1">@{user.username}</p>
+        )}
+
+        <p className="text-gray-500 text-xs">ID: {user.id}</p>
       </div>
 
-      {/* Список ставок - в стиле Crash */}
-      <div className="flex-1 min-h-0 px-0 mb-2">
-        <div className="bg-[rgba(0,0,0,0.45)] rounded-md p-2 border border-[rgba(0,229,255,0.06)] h-full overflow-y-auto">
-          {bets.length === 0 ? (
-            <div className="text-gray-500 text-sm p-2 text-center">Нет ставок в текущем раунде</div>
-          ) : (
-            <div className="space-y-1">
-              {bets.map((b, i) => {
-                const isMyBet = Number(b.userId) === Number(userId);
-                const isWinner = winner && Number(winner.userId) === Number(b.userId);
-                const chartItem = chartData.find(c => c.id === b.userId);
-                const sectorColor = chartItem?.color || '#00ffff';
+      {/* Баланс */}
+      <div className="flex-none mb-8">
+        <div className="glass-card p-6 text-center">
+          <div className="text-sm text-gray-400 mb-2">Текущий баланс</div>
+          <div className="text-4xl font-bold neon-accent mb-4 flex items-center justify-center">
+            <span>{formatTon(user.balance)}</span>
+            <Ton className="w-8 h-8 ml-2" />
+          </div>
+          {config.debugMode && (
+            <div className="flex gap-2">
+              <button
+                onClick={handleRefresh}
+                className="neon-btn neon-btn-green px-6 py-2 text-sm"
+                disabled={loading}
+              >
+                {loading ? "Обновление..." : "Обновить баланс"}
+              </button>
+              {/* Кнопка для просмотра конфигурации - добавить в секцию с кнопками */}
 
-                return (
-                  <div
-                    key={`${b.userId}-${i}`}
-                    className={`flex items-center justify-between py-2 px-3 rounded-lg text-sm transition-all ${isWinner
-                        ? "bg-gradient-to-r from-green-500/20 to-yellow-500/20 border border-green-500/40 shadow-lg shadow-green-500/20"
-                        : isMyBet
-                          ? "bg-gradient-to-r from-pink-500/10 to-cyan-500/10 border border-pink-500/20"
-                          : "bg-[rgba(255,255,255,0.02)] hover:bg-[rgba(255,255,255,0.05)]"
-                      }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <UserAvatar user={b} size="w-6 h-6" />
-                      <div>
-                        <div
-                          className={`font-medium text-sm`}
-                          style={{ color: sectorColor }}
-                        >
-                          {getUserDisplayName(b)}
-                          {isMyBet && <span className="ml-1 text-xs opacity-70">(Вы)</span>}
-                          {isWinner && <span className="ml-1 text-xs text-green-400">👑</span>}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="neon-text text-sm">
-                        {formatTon(b.amount)} <Ton className="w-3 h-3" />
-                      </div>
-                      <div className="text-xs text-gray-400">
-                        {chartItem?.percent || '0'}%
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+              <button
+                onClick={() => {
+                  clearLogs();
+                  logInfo('🔧 Конфигурация приложения:', {
+                    apiUrl: API,
+                    appDomain: config.appDomain,
+                    casinoAddress: config.casinoWalletAddress,
+                    manifestUrl: config.manifestUrl
+                  });
+                  logInfo('👤 Данные пользователя:', user);
+                  logInfo('💼 Данные кошелька:', wallet);
+                  showDebug('Информация о конфигурации');
+                }}
+                className="neon-btn w-full py-2 text-sm mb-2"
+              >
+                🔧 Debug: Конфигурация
+              </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Контролы ставок */}
-      {showBetInput && (
-        <div className="flex-none px-0 py-3">
-          <input
-            type="number"
-            value={bet}
-            onChange={(e) => setBet(e.target.value)}
-            placeholder="Минимум 0.01 TON"
-            step="0.01"
-            min="0.01"
-            max={user ? user.balance : undefined}
-            className="input-neon w-full mb-2 text-sm sm:text-base"
-            onKeyPress={(e) => {
-              if (e.key === 'Enter') placeBet();
-            }}
-          />
-          <button
-            onClick={placeBet}
-            className={`neon-btn neon-btn-yellow w-full text-sm sm:text-base py-2 sm:py-3 ${(!bet || parseFloat(bet) < 0.01) && "opacity-50 cursor-not-allowed"}`}
-            disabled={!bet || parseFloat(bet) < 0.01 || (user && parseFloat(bet) > user.balance)}
-          >
-            Сделать ставку
-          </button>
+      {/* Кнопки пополнения и вывода */}
+      <div className="flex-1 flex flex-col justify-end">
+        <div className="space-y-4">
+          <div className="glass-card p-4 mb-4">
+            {!wallet ? (
+              <button
+                onClick={() => tonConnectUI.openModal()}
+                className="neon-btn neon-btn-green w-full py-3 text-base font-semibold"
+              >
+                🔗 Подключить кошелек
+              </button>
+            ) : (
+              <>
+                <div className="text-sm text-gray-400 mb-2">Подключен кошелек:</div>
+                <div className="text-xs neon-text mb-4">
+                  {wallet.account.address.slice(0, 6)}...{wallet.account.address.slice(-6)}
+                </div>
+                <button
+                  onClick={() => tonConnectUI.disconnect()}
+                  className="neon-btn w-full py-2 text-sm"
+                >
+                  🔌 Отключить кошелек
+                </button>
+              </>
+            )}
+          </div>
+
+          {activeAction === null && wallet && (
+            <div className="flex gap-2">
+              <button
+                onClick={() => setActiveAction("deposit")}
+                className="neon-btn neon-btn-green flex-1 py-3 text-base font-semibold"
+              >
+                💰 Пополнить
+              </button>
+              <button
+                onClick={() => setActiveAction("withdraw")}
+                className="neon-btn neon-btn-pink flex-1 py-3 text-base font-semibold"
+                disabled={user.balance < config.minWithdrawal}
+              >
+                💸 Вывести
+              </button>
+            </div>
+          )}
+
+          {activeAction === "deposit" && (
+            <div className="glass-card p-4">
+              <div className="text-lg font-bold neon-accent mb-4">Пополнение баланса</div>
+              <div className="text-sm text-gray-400 mb-2">Минимальная сумма: 0.01 TON</div>
+              <input
+                type="number"
+                value={depositAmount}
+                onChange={(e) => setDepositAmount(e.target.value)}
+                placeholder="Введите сумму"
+                className="input-neon mb-3"
+                step="0.01"
+                min="0.01"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={handleDeposit}
+                  disabled={isDepositing || !depositAmount || parseFloat(depositAmount) < 0.01}
+                  className="neon-btn neon-btn-green flex-1 py-3 text-base font-semibold"
+                >
+                  {isDepositing ? "Обработка..." : "Пополнить"}
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveAction(null);
+                    setDepositAmount('');
+                  }}
+                  className="neon-btn px-6 py-3"
+                  disabled={isDepositing}
+                >
+                  Отмена
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activeAction === "withdraw" && (
+            <div className="glass-card p-4">
+              <div className="text-lg font-bold neon-accent mb-4">Вывод баланса</div>
+              <div className="text-sm text-gray-400 mb-2">
+                Минимум: {config.minWithdrawal} TON, Максимум: {user.balance} TON
+              </div>
+              <input
+                type="number"
+                value={withdrawalAmount}
+                onChange={(e) => setWithdrawalAmount(e.target.value)}
+                placeholder={`Мин. ${config.minWithdrawal} TON`}
+                className="input-neon mb-3"
+                step="0.01"
+                min={config.minWithdrawal}
+                max={user.balance}
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={handleWithdraw}
+                  disabled={isWithdrawing || !withdrawalAmount || parseFloat(withdrawalAmount) < config.minWithdrawal || parseFloat(withdrawalAmount) > user.balance}
+                  className="neon-btn neon-btn-pink flex-1 py-3 text-base font-semibold"
+                >
+                  {isWithdrawing ? "Обработка..." : "Вывести"}
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveAction(null);
+                    setWithdrawalAmount('');
+                  }}
+                  className="neon-btn px-6 py-3"
+                  disabled={isWithdrawing}
+                >
+                  Отмена
+                </button>
+              </div>
+            </div>
+          )}
         </div>
+      </div>
+      {/* Debug Modal - показывается только в debug режиме */}
+      {config.debugMode && (
+        <DebugModal
+          isOpen={debugData.isOpen}
+          onClose={closeDebug}
+          title={debugData.title}
+          logs={debugData.logs}
+          error={debugData.error}
+        />
       )}
     </div>
   );
