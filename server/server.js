@@ -198,10 +198,25 @@ db.serialize(() => {
     console.log("Users table ready");
   });
 
-  db.run(`ALTER TABLE users ADD COLUMN username TEXT`, () => { });
-  db.run(`ALTER TABLE users ADD COLUMN first_name TEXT`, () => { });
-  db.run(`ALTER TABLE users ADD COLUMN last_name TEXT`, () => { });
-  db.run(`ALTER TABLE users ADD COLUMN photo_url TEXT`, () => { });
+  // Создаем таблицу для floor цен подарков
+  db.run(`
+    CREATE TABLE IF NOT EXISTS gifts_floor (
+      name TEXT PRIMARY KEY,
+      price REAL NOT NULL
+    )
+  `, (err) => {
+    if (err) {
+      console.error("Failed to create gifts_floor table:", err);
+      return;
+    }
+    console.log("Gifts floor table ready");
+  });
+
+  // Add columns to existing table if they don't exist
+  db.run(`ALTER TABLE users ADD COLUMN username TEXT`, () => {});
+  db.run(`ALTER TABLE users ADD COLUMN first_name TEXT`, () => {});
+  db.run(`ALTER TABLE users ADD COLUMN last_name TEXT`, () => {});
+  db.run(`ALTER TABLE users ADD COLUMN photo_url TEXT`, () => {});
 });
 
 const app = express();
@@ -1533,8 +1548,69 @@ app.get("/api/user/:id/transactions", async (req, res) => {
   }
 });
 
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "index.html"));
+// API для обновления floor цен подарков (от парсера Tonnel)
+app.post("/tonnel", async (req, res) => {
+  const { timestamp, items } = req.body;
+
+  if (!items || !Array.isArray(items)) {
+    return res.status(400).json({ error: "Invalid items data" });
+  }
+
+  console.log(`📦 Received ${items.length} gift floor prices from Tonnel parser`);
+
+  try {
+    const db = await dbPool.getConnection();
+
+    // Обновляем/вставляем floor цены для каждого подарка
+    const updatePromises = items.map(item => {
+      return new Promise((resolve, reject) => {
+        const price = parseFloat(item.num.replace(',', '.')) || 0;
+        
+        db.run(`
+          INSERT OR REPLACE INTO gifts_floor (name, price) 
+          VALUES (?, ?)
+        `, [item.name, price], (err) => {
+          if (err) {
+            console.error(`Failed to update gift ${item.name}:`, err);
+            reject(err);
+          } else {
+            resolve();
+          }
+        });
+      });
+    });
+
+    await Promise.all(updatePromises);
+    dbPool.releaseConnection(db);
+
+    console.log(`✅ Updated ${items.length} gift floor prices`);
+    res.json({ success: true, updated: items.length });
+
+  } catch (error) {
+    console.error("❌ Failed to update gift floor prices:", error);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+// API для получения floor цен подарков
+app.get("/api/gifts/floor", async (req, res) => {
+  try {
+    const db = await dbPool.getConnection();
+
+    const gifts = await new Promise((resolve, reject) => {
+      db.all("SELECT name, price FROM gifts_floor ORDER BY price DESC", (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    });
+
+    dbPool.releaseConnection(db);
+    res.json({ gifts });
+
+  } catch (error) {
+    console.error("Failed to get gift floor prices:", error);
+    res.status(500).json({ error: "Database error" });
+  }
 });
 
 app.get("*", (req, res) => {
