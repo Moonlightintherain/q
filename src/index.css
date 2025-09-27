@@ -3,6 +3,9 @@
 @tailwind utilities;
 
 /* --- кастомные стили киберпанк --- */
+
+/* ==================== CSS ПЕРЕМЕННЫЕ И ТЕМЫ ==================== */
+
 :root {
   /* Dark theme (default) */
   --neon-green: #39ff14;
@@ -11,10 +14,10 @@
   --neon-yellow: #ffd700;
   --bg-circle-color: #050014;
   --tg-viewport-height: 100vh;
-  
+
   /* Dark theme colors */
-  --bg-primary: #050014;
-  --bg-secondary: #0b0024;
+  --bg-primary: linear-gradient(135deg, #050014 0%, #0b0024 50%, #0a0820 100%);
+  --bg-secondary: linear-gradient(135deg, #0b0024 0%, #1a0838 50%, #0f0628 100%);
   --bg-card: rgba(255, 255, 255, 0.02);
   --bg-card-border: rgba(57, 255, 20, 0.08);
   --text-primary: #00e5ff;
@@ -26,11 +29,11 @@
 /* Light theme */
 [data-theme="light"] {
   --neon-green: #10b981;
-  --neon-pink: #ec4899; 
+  --neon-pink: #ec4899;
   --neon-cyan: #06b6d4;
   --neon-yellow: #f59e0b;
   --bg-circle-color: #fef7ff;
-  
+
   /* Beautiful gradient light theme colors */
   --bg-primary: linear-gradient(135deg, #fef7ff 0%, #f0f9ff 50%, #f0fdf4 100%);
   --bg-secondary: linear-gradient(135deg, #fce7f3 0%, #dbeafe 50%, #dcfce7 100%);
@@ -41,6 +44,8 @@
   --text-muted: #64748b;
   --text-accent: #ec4899;
 }
+
+/* ==================== ГЛОБАЛЬНЫЕ СТИЛИ И СБРОС ==================== */
 
 /* Fullscreen mobile optimization */
 html,
@@ -61,13 +66,11 @@ body {
   color: var(--text-secondary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-
   /* Prevent mobile zoom and scrolling */
   -webkit-text-size-adjust: 100%;
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
-
   /* Ensure proper mobile display */
   position: fixed;
   top: 0;
@@ -97,31 +100,75 @@ body {
   box-sizing: border-box;
 }
 
-/* фоновая анимация — мягкий движущийся градиент */
+/* ==================== АНИМАЦИИ И КЕЙФРЕЙМЫ ==================== */
+
+/* Хаотичное движение цвета */
+@keyframes gradientChaos {
+  0%   { background-position: 0%   50%; }
+  20%  { background-position: 60%  100%; }
+  40%  { background-position: 100% 40%; }
+  60%  { background-position: 40%   0%; }
+  80%  { background-position: 0%   60%; }
+  100% { background-position: 0%   50%; } /* возврат к исходному */
+}
+
+/* Псевдо-рандомное вращение */
+@keyframes rotateChaos {
+  0%   { transform: rotate(0deg) scale(1.5); }
+  25%  { transform: rotate(15deg) scale(1.55); }
+  50%  { transform: rotate(-10deg) scale(1.6); }
+  75%  { transform: rotate(20deg) scale(1.55); }
+  100% { transform: rotate(0deg) scale(1.5); } /* возврат */
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* ==================== ФОНОВЫЕ ЭЛЕМЕНТЫ И ЭФФЕКТЫ ==================== */
+
 .bg-shift {
-  background: linear-gradient(180deg, var(--bg-primary), var(--bg-secondary));
   position: absolute;
   inset: 0;
   z-index: -2;
-  animation: shift 15s ease infinite;
+
+  /* Тёмная тема — "космос" */
+  background: linear-gradient(270deg,
+    rgba(20, 10, 40, 0.9),
+    rgba(40, 0, 80, 0.9),
+    rgba(10, 0, 60, 0.9),
+    rgba(0, 0, 0, 0.9),
+    rgba(30, 0, 72, 0.9),
+    rgba(19, 16, 64, 0.9)
+  );
+  background-size: 600% 600%;
+
+  animation: gradientChaos 120s ease-in-out infinite,
+             rotateChaos 240s linear infinite;
+  transform-origin: center center;
 }
 
-/* Light theme background shift */
+/* Светлая тема — "акварель" */
 [data-theme="light"] .bg-shift {
-  background: linear-gradient(45deg, 
-    rgba(254, 247, 255, 0.9) 0%, 
-    rgba(240, 249, 255, 0.9) 25%,
-    rgba(240, 253, 244, 0.9) 50%,
-    rgba(252, 231, 243, 0.9) 75%,
-    rgba(254, 247, 255, 0.9) 100%);
-  background-size: 400% 400%;
-  animation: shift 15s ease infinite;
-}
+  background: linear-gradient(270deg,
+    rgba(255, 230, 240, 0.9),
+    rgba(210, 240, 255, 0.9),
+    rgba(220, 255, 230, 0.9),
+    rgba(255, 245, 220, 0.9),
+    rgba(245, 220, 255, 0.9),
+    rgba(200, 255, 245, 0.9)
+  );
+  background-size: 600% 600%;
 
-@keyframes shift {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+  animation: gradientChaos 120s ease-in-out infinite,
+             rotateChaos 240s linear infinite;
+  transform-origin: center center;
 }
 
 /* декоративный шум */
@@ -130,44 +177,63 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background-image: radial-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-  background-size: 2px 2px;
+  background-image:
+    radial-gradient(circle at 25% 25%, rgba(57, 255, 20, 0.02) 1px, transparent 1px),
+    radial-gradient(circle at 75% 75%, rgba(0, 229, 255, 0.02) 1px, transparent 1px);
+  background-size: 3px 3px, 5px 5px;
   mix-blend-mode: overlay;
   z-index: -1;
 }
 
 /* Light theme noise */
 [data-theme="light"] .noise:after {
-  background-image: 
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
     radial-gradient(circle at 25% 25%, rgba(236, 72, 153, 0.02) 1px, transparent 1px),
     radial-gradient(circle at 75% 75%, rgba(6, 182, 212, 0.02) 1px, transparent 1px);
   background-size: 3px 3px, 5px 5px;
+  mix-blend-mode: overlay;
+  z-index: -1;
 }
+
+/* ==================== СТЕКЛЯННЫЕ ПАНЕЛИ И КАРТОЧКИ ==================== */
 
 /* стеклянные панели */
 .glass-card {
-  background: linear-gradient(180deg, var(--bg-card), var(--bg-card));
+  background: linear-gradient(135deg,
+      rgba(255, 255, 255, 0.03) 0%,
+      rgba(5, 0, 20, 0.08) 50%,
+      rgba(11, 0, 36, 0.03) 100%);
   border: 1px solid var(--bg-card-border);
-  backdrop-filter: blur(8px) saturate(120%);
-  -webkit-backdrop-filter: blur(8px) saturate(120%);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
   border-radius: 16px;
-  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.6), 0 0 30px var(--bg-card-border);
+  box-shadow:
+    0 8px 32px rgba(57, 255, 20, 0.1),
+    0 2px 16px rgba(0, 229, 255, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 /* Light theme glass cards */
 [data-theme="light"] .glass-card {
-  background: linear-gradient(135deg, 
-    rgba(255, 255, 255, 0.9) 0%, 
-    rgba(254, 247, 255, 0.8) 50%,
-    rgba(240, 249, 255, 0.9) 100%);
+  background: linear-gradient(135deg,
+      rgba(255, 255, 255, 0.9) 0%,
+      rgba(254, 247, 255, 0.8) 50%,
+      rgba(240, 249, 255, 0.9) 100%);
   border: 1px solid rgba(236, 72, 153, 0.15);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
-  box-shadow: 
+  border-radius: 16px;
+  box-shadow:
     0 8px 32px rgba(236, 72, 153, 0.1),
     0 2px 16px rgba(6, 182, 212, 0.05),
     inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
+
+/* ==================== НЕОНОВЫЙ ТЕКСТ ==================== */
 
 /* неоновый текст */
 .neon-text {
@@ -206,11 +272,41 @@ body {
   text-shadow: 0 0 3px var(--neon-pink), 0 0 8px rgba(225, 29, 72, 0.15);
 }
 
+/* Цвета текста победителя/проигрыша - адаптивные к теме */
+.text-green-400 {
+  color: var(--neon-green);
+  text-shadow: 0 0 5px var(--neon-green), 0 0 10px var(--neon-green), 0 0 20px var(--neon-green);
+}
+
+[data-theme="light"] .text-green-400 {
+  color: #16a34a;
+  /* Override with standard green for light theme */
+  text-shadow: 0 0 3px var(--neon-green), 0 0 8px var(--neon-green);
+}
+
+.text-yellow-400 {
+  color: var(--neon-yellow);
+  text-shadow: 0 0 5px var(--neon-yellow), 0 0 10px var(--neon-yellow), 0 0 20px var(--neon-yellow);
+}
+
+[data-theme="light"] .text-yellow-400 {
+  color: #ca8a04;
+  /* Override with standard yellow for light theme */
+  text-shadow: 0 0 3px var(--neon-yellow), 0 0 8px var(--neon-yellow);
+}
+
+/* ==================== КНОПКИ ==================== */
+
 /* неоновые кнопки */
 .neon-btn {
   @apply px-4 py-3 rounded-xl font-semibold tracking-wide transition-all;
-  background: linear-gradient(90deg, var(--bg-card), var(--bg-card));
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(135deg,
+      rgba(255, 255, 255, 0.03) 0%,
+      rgba(5, 0, 20, 0.06) 100%);
+  border: 2px solid rgba(255, 255, 255, 0.06);
+  box-shadow:
+    0 4px 15px rgba(0, 0, 0, 0.3),
+    inset 0 1px 3px rgba(255, 255, 255, 0.05);
   color: var(--text-primary);
   min-height: 44px;
   display: flex;
@@ -221,13 +317,21 @@ body {
 }
 
 [data-theme="light"] .neon-btn {
-  background: linear-gradient(135deg, 
-    rgba(255, 255, 255, 0.8) 0%, 
-    rgba(254, 247, 255, 0.6) 100%);
+  @apply px-4 py-3 rounded-xl font-semibold tracking-wide transition-all;
+  background: linear-gradient(135deg,
+      rgba(255, 255, 255, 0.8) 0%,
+      rgba(254, 247, 255, 0.6) 100%);
   border: 2px solid rgba(30, 41, 59, 0.1);
-  box-shadow: 
+  box-shadow:
     0 4px 15px rgba(0, 0, 0, 0.05),
     inset 0 1px 3px rgba(255, 255, 255, 0.8);
+  color: var(--text-primary);
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-weight: bold;
 }
 
 .neon-btn:active {
@@ -240,14 +344,18 @@ body {
 
 .neon-btn-green {
   color: var(--neon-green);
-  border-color: rgba(34, 197, 94, 0.18);
+  border-color: rgba(57, 255, 20, 0.3);
+  background: linear-gradient(135deg,
+      rgba(5, 20, 5, 0.8) 0%,
+      rgba(10, 40, 10, 0.6) 100%);
 }
 
 [data-theme="light"] .neon-btn-green {
+  color: var(--neon-green);
   border-color: rgba(16, 185, 129, 0.3);
-  background: linear-gradient(135deg, 
-    rgba(220, 252, 231, 0.8) 0%, 
-    rgba(255, 255, 255, 0.8) 100%);
+  background: linear-gradient(135deg,
+      rgba(220, 252, 231, 0.8) 0%,
+      rgba(255, 255, 255, 0.8) 100%);
 }
 
 .neon-btn-green:active {
@@ -260,14 +368,18 @@ body {
 
 .neon-btn-pink {
   color: var(--neon-pink);
-  border-color: rgba(225, 29, 72, 0.18);
+  border-color: rgba(255, 45, 149, 0.3);
+  background: linear-gradient(135deg, 
+    rgba(20, 5, 15, 0.8) 0%, 
+    rgba(40, 10, 30, 0.6) 100%);
 }
 
 [data-theme="light"] .neon-btn-pink {
+  color: var(--neon-pink);
   border-color: rgba(236, 72, 153, 0.3);
-  background: linear-gradient(135deg, 
-    rgba(252, 231, 243, 0.8) 0%, 
-    rgba(255, 255, 255, 0.8) 100%);
+  background: linear-gradient(135deg,
+      rgba(252, 231, 243, 0.8) 0%,
+      rgba(255, 255, 255, 0.8) 100%);
 }
 
 .neon-btn-pink:active {
@@ -280,14 +392,18 @@ body {
 
 .neon-btn-yellow {
   color: var(--neon-yellow);
-  border-color: rgba(234, 179, 8, 0.18);
+  border-color: rgba(255, 215, 0, 0.3);
+  background: linear-gradient(135deg, 
+    rgba(20, 20, 5, 0.8) 0%, 
+    rgba(40, 40, 10, 0.6) 100%);
 }
 
 [data-theme="light"] .neon-btn-yellow {
+  color: var(--neon-yellow);
   border-color: rgba(245, 158, 11, 0.3);
-  background: linear-gradient(135deg, 
-    rgba(254, 243, 199, 0.8) 0%, 
-    rgba(255, 255, 255, 0.8) 100%);
+  background: linear-gradient(135deg,
+      rgba(254, 243, 199, 0.8) 0%,
+      rgba(255, 255, 255, 0.8) 100%);
 }
 
 .neon-btn-yellow:active {
@@ -298,37 +414,13 @@ body {
   box-shadow: 0 0 8px var(--neon-yellow), 0 0 15px var(--neon-yellow), 0 0 20px var(--neon-yellow);
 }
 
-/* нижнее меню - адаптировано для fullscreen */
-.bottom-rail {
-  background: rgba(0, 0, 0, 0.45);
-  margin-block: 8px;
-  border-radius: 16px;
+/* Better focus states for light theme */
+[data-theme="light"] .neon-btn:focus {
+  outline: 2px solid var(--neon-cyan);
+  outline-offset: 2px;
 }
 
-[data-theme="light"] .bottom-rail {
-  background: linear-gradient(135deg, 
-    rgba(255, 255, 255, 0.9) 0%, 
-    rgba(252, 231, 243, 0.8) 50%,
-    rgba(219, 234, 254, 0.9) 100%);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(236, 72, 153, 0.2);
-  box-shadow: 
-    0 -4px 20px rgba(236, 72, 153, 0.08),
-    0 -2px 10px rgba(6, 182, 212, 0.05);
-}
-
-/* multiplier big - увеличенный размер */
-.multiplier {
-  font-size: 5rem;
-  font-weight: 900;
-  letter-spacing: -0.02em;
-}
-
-@media (max-width: 640px) {
-  .multiplier {
-    font-size: 3rem;
-  }
-}
+/* ==================== ПОЛЯ ВВОДА ==================== */
 
 /* input styling */
 .input-neon {
@@ -338,19 +430,33 @@ body {
   outline: none;
   min-height: 44px;
   font-size: 16px;
-  background: var(--bg-card);
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.02) 0%, 
+    rgba(5, 0, 20, 0.05) 100%);
+  border: 2px solid var(--bg-card-border);
+  box-shadow: 
+    0 4px 15px rgba(0, 229, 255, 0.05),
+    inset 0 1px 3px rgba(255, 255, 255, 0.02);
   font-weight: bold;
   text-align: center;
 }
 
 [data-theme="light"] .input-neon {
-  background: linear-gradient(135deg, 
-    rgba(255, 255, 255, 0.9) 0%, 
-    rgba(254, 247, 255, 0.8) 100%);
+  @apply w-full rounded-lg px-4 py-3 bg-transparent border;
+  border-color: var(--bg-card-border);
+  color: var(--text-primary);
+  outline: none;
+  min-height: 44px;
+  font-size: 16px;
+  background: linear-gradient(135deg,
+      rgba(255, 255, 255, 0.9) 0%,
+      rgba(254, 247, 255, 0.8) 100%);
   border: 2px solid rgba(236, 72, 153, 0.2);
-  box-shadow: 
+  box-shadow:
     0 4px 15px rgba(236, 72, 153, 0.05),
     inset 0 1px 3px rgba(255, 255, 255, 0.8);
+  font-weight: bold;
+  text-align: center;
 }
 
 .input-neon::placeholder {
@@ -364,18 +470,44 @@ body {
 
 [data-theme="light"] .input-neon:focus {
   border-color: rgba(236, 72, 153, 0.4);
-  box-shadow: 
+  box-shadow:
     0 0 0 3px rgba(236, 72, 153, 0.1),
     0 4px 20px rgba(236, 72, 153, 0.1),
     inset 0 1px 3px rgba(255, 255, 255, 0.9);
 }
 
-@media (max-width: 640px) {
-  .input-neon {
-    padding: 0.75rem;
-    font-size: 16px; /* Prevent zoom on iOS */
-  }
+/* ==================== НАВИГАЦИЯ И МЕНЮ ==================== */
+
+/* нижнее меню - адаптировано для fullscreen */
+.bottom-rail {
+  background: linear-gradient(135deg, 
+    rgba(0, 0, 0, 0.6) 0%, 
+    rgba(20, 5, 15, 0.5) 50%,
+    rgba(5, 15, 30, 0.6) 100%);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(57, 255, 20, 0.1);
+  box-shadow: 
+    0 -4px 20px rgba(0, 229, 255, 0.08),
+    0 -2px 10px rgba(57, 255, 20, 0.05);
+  margin-block: 8px;
+  border-radius: 16px;
 }
+
+[data-theme="light"] .bottom-rail {
+  background: linear-gradient(135deg,
+      rgba(255, 255, 255, 0.9) 0%,
+      rgba(252, 231, 243, 0.8) 50%,
+      rgba(219, 234, 254, 0.9) 100%);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(236, 72, 153, 0.2);
+  box-shadow:
+    0 -4px 20px rgba(236, 72, 153, 0.08),
+    0 -2px 10px rgba(6, 182, 212, 0.05);
+  margin-block: 8px;
+  border-radius: 16px;
+}
+
+/* ==================== СПИСОК СТАВОК И КОНТЕЙНЕРЫ ==================== */
 
 /* Scrollable containers for bet lists */
 .bet-list-container {
@@ -408,174 +540,6 @@ body {
   height: 100%;
 }
 
-@media (max-width: 640px) {
-  .bet-list-container {
-    max-height: 25vh;
-  }
-}
-
-/* User avatar styling */
-.user-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid rgba(0, 229, 255, 0.3);
-}
-
-[data-theme="light"] .user-avatar {
-  border: 2px solid rgba(14, 165, 233, 0.4);
-}
-
-/* Balance display in header */
-.balance-display {
-  font-size: 14px;
-  line-height: 1.2;
-}
-
-@media (max-width: 640px) {
-  .balance-display {
-    font-size: 12px;
-  }
-}
-
-/* small helpers */
-.row-between {
-  display: flex;
-  justify-content: space-between;
-  align-items: center
-}
-
-.fill-bg-circle {
-  fill: var(--bg-circle-color);
-}
-
-/* Prevent text selection on game elements */
-.game-element {
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-  user-select: none;
-}
-
-/* Loading and error states */
-.loading-spinner {
-  width: 24px;
-  height: 24px;
-  border: 2px solid var(--bg-card-border);
-  border-top: 2px solid var(--neon-cyan);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-/* Improved loading spinner for light theme */
-[data-theme="light"] .loading-spinner {
-  border-color: var(--bg-card-border);
-  border-top-color: var(--neon-cyan);
-}
-
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-/* Theme-specific text colors */
-[data-theme="light"] .text-gray-400 {
-  color: var(--text-muted);
-}
-
-[data-theme="light"] .text-gray-500 {
-  color: var(--text-muted);
-}
-
-[data-theme="light"] .text-cyan-100 {
-  color: var(--text-secondary);
-}
-
-[data-theme="light"] .text-red-400 {
-  color: #dc2626;
-}
-
-[data-theme="light"] .text-green-400 {
-  color: #16a34a;
-}
-
-[data-theme="light"] .text-yellow-400 {
-  color: #ca8a04;
-}
-
-[data-theme="light"] .text-red-500 {
-  color: #dc2626;
-}
-
-/* Background overlays for bet lists */
-[data-theme="light"] .bg-\[rgba\(0\,0\,0\,0\.45\)\] {
-  background: linear-gradient(135deg, 
-    rgba(255, 255, 255, 0.9) 0%, 
-    rgba(252, 231, 243, 0.7) 50%,
-    rgba(219, 234, 254, 0.9) 100%) !important;
-  border: 1px solid rgba(236, 72, 153, 0.2) !important;
-  backdrop-filter: blur(15px);
-  box-shadow: 
-    0 4px 20px rgba(236, 72, 153, 0.08),
-    inset 0 1px 3px rgba(255, 255, 255, 0.8);
-}
-
-/* Light theme bet item backgrounds */
-[data-theme="light"] .bg-\[rgba\(255\,255\,255\,0\.02\)\] {
-  background: rgba(15, 23, 42, 0.04) !important;
-}
-
-/* Additional theme-specific improvements */
-
-/* Gradient backgrounds for bet items in light theme */
-[data-theme="light"] .bg-gradient-to-r.from-pink-500\/10.to-cyan-500\/10 {
-  background: linear-gradient(to right, 
-    rgba(236, 72, 153, 0.12) 0%, 
-    rgba(6, 182, 212, 0.12) 100%) !important;
-  border: 1px solid rgba(236, 72, 153, 0.25) !important;
-  backdrop-filter: blur(10px);
-}
-
-[data-theme="light"] .border-pink-500\/20 {
-  border-color: rgba(225, 29, 72, 0.3) !important;
-}
-
-[data-theme="light"] .bg-gradient-to-r.from-green-500\/20.to-yellow-500\/20 {
-  background: linear-gradient(to right, 
-    rgba(16, 185, 129, 0.15) 0%, 
-    rgba(245, 158, 11, 0.15) 100%) !important;
-  border: 1px solid rgba(16, 185, 129, 0.4) !important;
-  box-shadow: 
-    0 4px 15px rgba(16, 185, 129, 0.1),
-    0 2px 8px rgba(245, 158, 11, 0.05);
-}
-
-[data-theme="light"] .border-green-500\/40 {
-  border-color: rgba(34, 197, 94, 0.5) !important;
-}
-
-[data-theme="light"] .shadow-green-500\/20 {
-  box-shadow: 0 10px 15px -3px rgba(34, 197, 94, 0.2), 0 4px 6px -2px rgba(34, 197, 94, 0.1) !important;
-}
-
-/* Wheel pointer and center styling for light theme */
-[data-theme="light"] .wheel-center {
-  background-color: var(--bg-primary);
-  border: 2px solid var(--text-primary);
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
-}
-
-[data-theme="light"] .wheel-pointer svg path {
-  fill: var(--text-primary);
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
-}
-
 /* Custom scrollbar styles for both themes */
 .bet-list-container::-webkit-scrollbar,
 .bg-overlay::-webkit-scrollbar {
@@ -605,34 +569,7 @@ body {
   border-radius: 3px;
 }
 
-/* Better focus states for light theme */
-[data-theme="light"] .neon-btn:focus {
-  outline: 2px solid var(--neon-cyan);
-  outline-offset: 2px;
-}
-
-/* Roulette-specific styles from Roulette.css */
-
-/* Цвета текста победителя/проигрыша - адаптивные к теме */
-.text-green-400 {
-  color: var(--neon-green);
-  text-shadow: 0 0 5px var(--neon-green), 0 0 10px var(--neon-green), 0 0 20px var(--neon-green);
-}
-
-[data-theme="light"] .text-green-400 {
-  color: #16a34a; /* Override with standard green for light theme */
-  text-shadow: 0 0 3px var(--neon-green), 0 0 8px var(--neon-green);
-}
-
-.text-yellow-400 {
-  color: var(--neon-yellow);
-  text-shadow: 0 0 5px var(--neon-yellow), 0 0 10px var(--neon-yellow), 0 0 20px var(--neon-yellow);
-}
-
-[data-theme="light"] .text-yellow-400 {
-  color: #ca8a04; /* Override with standard yellow for light theme */
-  text-shadow: 0 0 3px var(--neon-yellow), 0 0 8px var(--neon-yellow);
-}
+/* ==================== РУЛЕТКА И ИГРОВЫЕ ЭЛЕМЕНТЫ ==================== */
 
 /* Центр круга и стрелка - адаптивные цвета */
 .wheel-center {
@@ -684,6 +621,21 @@ body {
   filter: url(#inner-light-glow);
 }
 
+/* Анимация вращения колеса */
+.wheel-spinning {
+  transition: transform 8s cubic-bezier(0.2, 0.8, 0.5, 1);
+}
+
+/* Prevent text selection on game elements */
+.game-element {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* ==================== ТАЙМЕР И СОСТОЯНИЯ ==================== */
+
 /* Стили для таймера обратного отсчета - адаптивные к теме */
 .countdown-timer {
   color: var(--neon-yellow);
@@ -694,30 +646,62 @@ body {
   text-shadow: 0 0 5px var(--neon-yellow);
 }
 
-/* Анимация вращения колеса */
-.wheel-spinning {
-  transition: transform 8s cubic-bezier(0.2, 0.8, 0.5, 1);
+/* Loading and error states */
+.loading-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--bg-card-border);
+  border-top: 2px solid var(--neon-cyan);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
 }
 
-/* Мобильные улучшения для рулетки */
-@media (max-width: 640px) {
-  .neon-btn {
-    min-height: 44px; /* Touch-friendly */
-    font-size: 14px;
-  }
-  
-  .glass-card {
-    border-radius: 12px; /* Smaller radius on mobile */
-  }
+/* Improved loading spinner for light theme */
+[data-theme="light"] .loading-spinner {
+  border-color: var(--bg-card-border);
+  border-top-color: var(--neon-cyan);
 }
 
-/* Улучшения для колеса на мобильном */
-@media (max-width: 480px) {
-  .wheel-pointer svg {
-    width: 30px;
-    height: 30px;
-  }
+/* ==================== ИНТЕРФЕЙС И ЭЛЕМЕНТЫ ==================== */
+
+/* User avatar styling */
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(0, 229, 255, 0.3);
 }
+
+[data-theme="light"] .user-avatar {
+  border: 2px solid rgba(14, 165, 233, 0.4);
+}
+
+/* Balance display in header */
+.balance-display {
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+/* multiplier big - увеличенный размер */
+.multiplier {
+  font-size: 5rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+
+/* small helpers */
+.row-between {
+  display: flex;
+  justify-content: space-between;
+  align-items: center
+}
+
+.fill-bg-circle {
+  fill: var(--bg-circle-color);
+}
+
+/* ==================== ПЕРЕХОДЫ И АНИМАЦИИ ТЕМЫ ==================== */
 
 /* Theme transition animation */
 * {
@@ -727,4 +711,138 @@ body {
 /* Disable transitions during theme change to prevent flashing */
 .theme-transitioning * {
   transition: none !important;
+}
+
+/* ==================== СВЕТЛАЯ ТЕМА - ПЕРЕОПРЕДЕЛЕНИЯ ==================== */
+
+/* Theme-specific text colors */
+[data-theme="light"] .text-gray-400 {
+  color: var(--text-muted);
+}
+
+[data-theme="light"] .text-gray-500 {
+  color: var(--text-muted);
+}
+
+[data-theme="light"] .text-cyan-100 {
+  color: var(--text-secondary);
+}
+
+[data-theme="light"] .text-red-400 {
+  color: #dc2626;
+}
+
+[data-theme="light"] .text-green-400 {
+  color: #16a34a;
+}
+
+[data-theme="light"] .text-yellow-400 {
+  color: #ca8a04;
+}
+
+[data-theme="light"] .text-red-500 {
+  color: #dc2626;
+}
+
+/* Background overlays for bet lists */
+[data-theme="light"] .bg-\[rgba\(0\,0\,0\,0\.45\)\] {
+  background: linear-gradient(135deg,
+      rgba(255, 255, 255, 0.9) 0%,
+      rgba(252, 231, 243, 0.7) 50%,
+      rgba(219, 234, 254, 0.9) 100%) !important;
+  border: 1px solid rgba(236, 72, 153, 0.2) !important;
+  backdrop-filter: blur(15px);
+  box-shadow:
+    0 4px 20px rgba(236, 72, 153, 0.08),
+    inset 0 1px 3px rgba(255, 255, 255, 0.8);
+}
+
+/* Light theme bet item backgrounds */
+[data-theme="light"] .bg-\[rgba\(255\,255\,255\,0\.02\)\] {
+  background: rgba(15, 23, 42, 0.04) !important;
+}
+
+/* Additional theme-specific improvements */
+/* Gradient backgrounds for bet items in light theme */
+[data-theme="light"] .bg-gradient-to-r.from-pink-500\/10.to-cyan-500\/10 {
+  background: linear-gradient(to right,
+      rgba(236, 72, 153, 0.12) 0%,
+      rgba(6, 182, 212, 0.12) 100%) !important;
+  border: 1px solid rgba(236, 72, 153, 0.25) !important;
+  backdrop-filter: blur(10px);
+}
+
+[data-theme="light"] .border-pink-500\/20 {
+  border-color: rgba(225, 29, 72, 0.3) !important;
+}
+
+[data-theme="light"] .bg-gradient-to-r.from-green-500\/20.to-yellow-500\/20 {
+  background: linear-gradient(to right,
+      rgba(16, 185, 129, 0.15) 0%,
+      rgba(245, 158, 11, 0.15) 100%) !important;
+  border: 1px solid rgba(16, 185, 129, 0.4) !important;
+  box-shadow:
+    0 4px 15px rgba(16, 185, 129, 0.1),
+    0 2px 8px rgba(245, 158, 11, 0.05);
+}
+
+[data-theme="light"] .border-green-500\/40 {
+  border-color: rgba(34, 197, 94, 0.5) !important;
+}
+
+[data-theme="light"] .shadow-green-500\/20 {
+  box-shadow: 0 10px 15px -3px rgba(34, 197, 94, 0.2), 0 4px 6px -2px rgba(34, 197, 94, 0.1) !important;
+}
+
+/* Wheel pointer and center styling for light theme */
+[data-theme="light"] .wheel-center {
+  background-color: var(--bg-primary);
+  border: 2px solid var(--text-primary);
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="light"] .wheel-pointer svg path {
+  fill: var(--text-primary);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
+/* ==================== МЕДИА-ЗАПРОСЫ И АДАПТИВНОСТЬ ==================== */
+
+@media (max-width: 640px) {
+  .multiplier {
+    font-size: 3rem;
+  }
+
+  .input-neon {
+    padding: 0.75rem;
+    font-size: 16px;
+    /* Prevent zoom on iOS */
+  }
+
+  .balance-display {
+    font-size: 12px;
+  }
+
+  .bet-list-container {
+    max-height: 25vh;
+  }
+
+  .neon-btn {
+    min-height: 44px;
+    /* Touch-friendly */
+    font-size: 14px;
+  }
+
+  .glass-card {
+    border-radius: 12px;
+    /* Smaller radius on mobile */
+  }
+}
+
+/* Мобильные улучшения для рулетки */
+@media (max-width: 480px) {
+  .wheel-pointer svg {
+    width: 30px;
+    height: 30px;
+  }
 }
