@@ -216,6 +216,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
+  font-weight: bold;
 }
 
 [data-theme="light"] .neon-btn {
@@ -337,6 +339,18 @@ body {
   min-height: 44px;
   font-size: 16px;
   background: var(--bg-card);
+  font-weight: bold;
+  text-align: center;
+}
+
+[data-theme="light"] .input-neon {
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.9) 0%, 
+    rgba(254, 247, 255, 0.8) 100%);
+  border: 2px solid rgba(236, 72, 153, 0.2);
+  box-shadow: 
+    0 4px 15px rgba(236, 72, 153, 0.05),
+    inset 0 1px 3px rgba(255, 255, 255, 0.8);
 }
 
 .input-neon::placeholder {
@@ -346,6 +360,21 @@ body {
 .input-neon:focus {
   border-color: var(--neon-cyan);
   box-shadow: 0 0 0 1px var(--neon-cyan);
+}
+
+[data-theme="light"] .input-neon:focus {
+  border-color: rgba(236, 72, 153, 0.4);
+  box-shadow: 
+    0 0 0 3px rgba(236, 72, 153, 0.1),
+    0 4px 20px rgba(236, 72, 153, 0.1),
+    inset 0 1px 3px rgba(255, 255, 255, 0.9);
+}
+
+@media (max-width: 640px) {
+  .input-neon {
+    padding: 0.75rem;
+    font-size: 16px; /* Prevent zoom on iOS */
+  }
 }
 
 /* Scrollable containers for bet lists */
@@ -359,6 +388,17 @@ body {
 [data-theme="light"] .bet-list-container {
   background: rgba(248, 250, 252, 0.8);
   border: 1px solid var(--bg-card-border);
+}
+
+/* Список ставок - более компактный и адаптивный к теме */
+.bg-overlay {
+  background: var(--bg-card);
+  border-radius: 0.5rem;
+  padding: 0.25rem;
+  border: 1px solid var(--bg-card-border);
+  max-height: 20vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Scrollable page containers */
@@ -426,6 +466,12 @@ body {
   border-top: 2px solid var(--neon-cyan);
   border-radius: 50%;
   animation: spin 1s linear infinite;
+}
+
+/* Improved loading spinner for light theme */
+[data-theme="light"] .loading-spinner {
+  border-color: var(--bg-card-border);
+  border-top-color: var(--neon-cyan);
 }
 
 @keyframes spin {
@@ -531,22 +577,32 @@ body {
 }
 
 /* Custom scrollbar styles for both themes */
-.bet-list-container::-webkit-scrollbar {
+.bet-list-container::-webkit-scrollbar,
+.bg-overlay::-webkit-scrollbar {
   width: 6px;
 }
 
-.bet-list-container::-webkit-scrollbar-track {
+.bet-list-container::-webkit-scrollbar-track,
+.bg-overlay::-webkit-scrollbar-track {
   background: rgba(255, 255, 255, 0.05);
   border-radius: 3px;
 }
 
-.bet-list-container::-webkit-scrollbar-thumb {
+.bet-list-container::-webkit-scrollbar-thumb,
+.bg-overlay::-webkit-scrollbar-thumb {
   background: var(--text-muted);
   border-radius: 3px;
 }
 
-[data-theme="light"] .bet-list-container::-webkit-scrollbar-track {
+[data-theme="light"] .bet-list-container::-webkit-scrollbar-track,
+[data-theme="light"] .bg-overlay::-webkit-scrollbar-track {
   background: rgba(15, 23, 42, 0.05);
+  border-radius: 3px;
+}
+
+[data-theme="light"] .bg-overlay::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  border-radius: 3px;
 }
 
 /* Better focus states for light theme */
@@ -555,28 +611,112 @@ body {
   outline-offset: 2px;
 }
 
-[data-theme="light"] .input-neon {
-  background: linear-gradient(135deg, 
-    rgba(255, 255, 255, 0.9) 0%, 
-    rgba(254, 247, 255, 0.8) 100%);
-  border: 2px solid rgba(236, 72, 153, 0.2);
-  box-shadow: 
-    0 4px 15px rgba(236, 72, 153, 0.05),
-    inset 0 1px 3px rgba(255, 255, 255, 0.8);
+/* Roulette-specific styles from Roulette.css */
+
+/* Цвета текста победителя/проигрыша - адаптивные к теме */
+.text-green-400 {
+  color: var(--neon-green);
+  text-shadow: 0 0 5px var(--neon-green), 0 0 10px var(--neon-green), 0 0 20px var(--neon-green);
 }
 
-[data-theme="light"] .input-neon:focus {
-  border-color: rgba(236, 72, 153, 0.4);
-  box-shadow: 
-    0 0 0 3px rgba(236, 72, 153, 0.1),
-    0 4px 20px rgba(236, 72, 153, 0.1),
-    inset 0 1px 3px rgba(255, 255, 255, 0.9);
+[data-theme="light"] .text-green-400 {
+  color: #16a34a; /* Override with standard green for light theme */
+  text-shadow: 0 0 3px var(--neon-green), 0 0 8px var(--neon-green);
 }
 
-/* Improved loading spinner for light theme */
-[data-theme="light"] .loading-spinner {
-  border-color: var(--bg-card-border);
-  border-top-color: var(--neon-cyan);
+.text-yellow-400 {
+  color: var(--neon-yellow);
+  text-shadow: 0 0 5px var(--neon-yellow), 0 0 10px var(--neon-yellow), 0 0 20px var(--neon-yellow);
+}
+
+[data-theme="light"] .text-yellow-400 {
+  color: #ca8a04; /* Override with standard yellow for light theme */
+  text-shadow: 0 0 3px var(--neon-yellow), 0 0 8px var(--neon-yellow);
+}
+
+/* Центр круга и стрелка - адаптивные цвета */
+.wheel-center {
+  width: 1rem;
+  height: 1rem;
+  background-color: var(--text-secondary);
+  border-radius: 50%;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 20;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="light"] .wheel-center {
+  background-color: var(--bg-primary);
+  border: 2px solid var(--text-primary);
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+}
+
+.wheel-pointer {
+  width: 0;
+  height: 0;
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-bottom: 20px solid var(--text-secondary);
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+[data-theme="light"] .wheel-pointer {
+  border-bottom-color: var(--text-primary);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
+/* Добавляем неоновый эффект для своей доли на колесе */
+.my-slice-neon {
+  /* Эффект внутренней тени теперь реализуется через SVG-фильтр */
+  filter: url(#inner-neon-glow);
+}
+
+/* Дополнительные стили для светлой темы */
+[data-theme="light"] .my-slice-neon {
+  filter: url(#inner-light-glow);
+}
+
+/* Стили для таймера обратного отсчета - адаптивные к теме */
+.countdown-timer {
+  color: var(--neon-yellow);
+  text-shadow: 0 0 10px var(--neon-yellow);
+}
+
+[data-theme="light"] .countdown-timer {
+  text-shadow: 0 0 5px var(--neon-yellow);
+}
+
+/* Анимация вращения колеса */
+.wheel-spinning {
+  transition: transform 8s cubic-bezier(0.2, 0.8, 0.5, 1);
+}
+
+/* Мобильные улучшения для рулетки */
+@media (max-width: 640px) {
+  .neon-btn {
+    min-height: 44px; /* Touch-friendly */
+    font-size: 14px;
+  }
+  
+  .glass-card {
+    border-radius: 12px; /* Smaller radius on mobile */
+  }
+}
+
+/* Улучшения для колеса на мобильном */
+@media (max-width: 480px) {
+  .wheel-pointer svg {
+    width: 30px;
+    height: 30px;
+  }
 }
 
 /* Theme transition animation */
