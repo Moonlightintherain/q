@@ -1,5 +1,6 @@
 import axios from 'axios';
 import dotenv from 'dotenv';
+import { Address } from '@ton/core';
 
 dotenv.config();
 
@@ -11,8 +12,6 @@ class TelegramBot {
 
   async sendMessage(userId, message, options = {}) {
     try {
-      console.log(`📱 Sending Telegram message to user ${userId}`);
-
       const payload = {
         chat_id: userId,
         text: message,
@@ -20,9 +19,7 @@ class TelegramBot {
         disable_web_page_preview: true,
         ...options
       };
-
       const response = await axios.post(`${this.baseUrl}/sendMessage`, payload);
-
       if (response.data.ok) {
         console.log('✅ Telegram message sent successfully');
         return { success: true, messageId: response.data.result.message_id };
@@ -44,7 +41,6 @@ class TelegramBot {
     const tonViewerLink = isRealTonHash
       ? `https://tonviewer.com/transaction/${transactionHash}`
       : `https://tonviewer.com/account/${walletAddress}`;
-
     // Преобразуем адрес в пользовательский формат
     const userFriendlyAddress = this.convertToUserFriendlyAddress(walletAddress);
 
@@ -54,10 +50,6 @@ class TelegramBot {
 💰 <b>Сумма:</b> ${amount} TON
 📍 <b>Кошелек:</b> <code>${userFriendlyAddress}</code>
 🔗 <b>Транзакция:</b> <code>${transactionHash}</code>
-🕐 <b>Время:</b> ${timestamp}
-
-📊 <b>Отследить транзакцию:</b>
-<a href="${tonViewerLink}">${isRealTonHash ? 'Открыть в TonViewer' : 'Открыть кошелек в TonViewer'}</a>
 
 ✅ Средства отправлены на ваш кошелек. Транзакция может занять несколько минут для подтверждения в сети TON.
   `.trim();
@@ -66,7 +58,7 @@ class TelegramBot {
       reply_markup: {
         inline_keyboard: [
           [{
-            text: '📊 Открыть в TonViewer',
+            text: '📊 Отследить транзакцию',
             url: tonViewerLink
           }]
         ]
@@ -80,13 +72,9 @@ class TelegramBot {
     const tonViewerLink = `https://tonviewer.com/transaction/${transactionHash}`;
 
     const message = `
-💰 <b>Депозит получен!</b>
+💰 <b>Баланс пополнен!</b>
 
 💎 <b>Сумма:</b> ${amount} TON
-🔗 <b>Транзакция:</b> <code>${transactionHash}</code>
-
-📊 <b>Отследить транзакцию:</b>
-<a href="${tonViewerLink}">Открыть в TonViewer</a>
 
 ✅ Средства зачислены на ваш игровой баланс!
     `.trim();
@@ -95,7 +83,7 @@ class TelegramBot {
       reply_markup: {
         inline_keyboard: [
           [{
-            text: '📊 Открыть в TonViewer',
+            text: '📊 Отследить транзакцию',
             url: tonViewerLink
           }]
         ]
@@ -116,14 +104,24 @@ class TelegramBot {
 
 💰 <b>Сумма:</b> ${amount} TON
 📍 <b>Кошелек:</b> <code>${userFriendlyAddress}</code>
-🕐 <b>Время:</b> ${timestamp}
 
 ⏳ Транзакция обрабатывается в сети TON. Это может занять от нескольких минут до часа.
 
 📞 Если средства не поступят в течение 1 часа, обратитесь в поддержку с указанием времени: ${timestamp}
   `.trim();
 
-    return await this.sendMessage(userId, message);
+    const options = {
+      reply_markup: {
+        inline_keyboard: [
+          [{
+            text: '📊 Отследить транзакцию',
+            url: tonViewerLink
+          }]
+        ]
+      }
+    };
+
+    return await this.sendMessage(userId, message, options);
   }
 
   async sendErrorNotification(userId, operation, error, debugInfo = null) {
@@ -158,25 +156,19 @@ class TelegramBot {
       }
     }
 
-    message += `\n\n📞 Если проблема повторяется, обратитесь в поддержку с указанием времени: ${timestamp}`;
+    message += `\n\nЕсли средства не зачислились на кошелёк, братитесь в поддержку`;
 
     return await this.sendMessage(userId, message);
   }
 
-  convertToUserFriendlyAddress(address) {
-    // Если адрес уже в формате UQ, возвращаем как есть
-    if (true || address.startsWith('UQ') || address.startsWith('EQ')) {
-      return address;
+  convertToUserFriendlyAddress(hash) {
+    try {
+      const address = Address.parseRaw(`0:${hash}`);
+      return address.toString();
+    } catch (error) {
+      console.error('Ошибка преобразования в юзерфрендли адрес:', error);
+      return hash;
     }
-
-    // Если адрес в формате 0:hex, конвертируем в UQ формат
-    if (address.startsWith('0:')) {
-      // Простая конвертация для отображения (это приблизительная логика)
-      const hexPart = address.substring(2);
-      return `UQ${hexPart.slice(0, 6)}...${hexPart.slice(-6)}`;
-    }
-
-    return address;
   }
 }
 
