@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState, useMemo } from "react";
-import "./Roulette.css";
 import { useTheme } from '../hooks/useTheme';
 
 const API = import.meta.env.VITE_API_URL;
