@@ -201,8 +201,9 @@ db.serialize(() => {
   // Создаем таблицу для floor цен подарков
   db.run(`
     CREATE TABLE IF NOT EXISTS gifts_floor (
-      name TEXT PRIMARY KEY,
-      price REAL NOT NULL
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      floor REAL NOT NULL
     )
   `, (err) => {
     if (err) {
@@ -213,10 +214,10 @@ db.serialize(() => {
   });
 
   // Add columns to existing table if they don't exist
-  db.run(`ALTER TABLE users ADD COLUMN username TEXT`, () => {});
-  db.run(`ALTER TABLE users ADD COLUMN first_name TEXT`, () => {});
-  db.run(`ALTER TABLE users ADD COLUMN last_name TEXT`, () => {});
-  db.run(`ALTER TABLE users ADD COLUMN photo_url TEXT`, () => {});
+  db.run(`ALTER TABLE users ADD COLUMN username TEXT`, () => { });
+  db.run(`ALTER TABLE users ADD COLUMN first_name TEXT`, () => { });
+  db.run(`ALTER TABLE users ADD COLUMN last_name TEXT`, () => { });
+  db.run(`ALTER TABLE users ADD COLUMN photo_url TEXT`, () => { });
 });
 
 const app = express();
@@ -820,6 +821,30 @@ app.get("/api/user/:id", (req, res) => {
   });
 });
 
+// Эндпоинт для получения подарков пользователя
+app.get("/api/user/:id/gifts", (req, res) => {
+  const { id } = req.params;
+
+  db.get("SELECT gifts FROM users WHERE id = ?", [id], (err, row) => {
+    if (err) {
+      console.error("Failed to get user gifts:", err);
+      return res.status(500).json({ error: err.message });
+    }
+
+    if (!row) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    try {
+      const gifts = JSON.parse(row.gifts || "[]");
+      return res.json({ gifts });
+    } catch (e) {
+      console.error("Failed to parse gifts:", e);
+      return res.json({ gifts: [] });
+    }
+  });
+});
+
 app.post("/api/crash/bet", (req, res) => {
   const { userId, amount } = req.body;
 
@@ -1204,8 +1229,8 @@ function startCrashLoop() {
           }
 
           crashHistory.unshift(crashAt);
-          if (crashHistory.length > 10) {
-            crashHistory = crashHistory.slice(0, 10);
+          if (crashHistory.length > 100) {
+            crashHistory = crashHistory.slice(0, 100);
           }
 
           Promise.all(Object.values(crashBets).map(bet =>
@@ -1564,12 +1589,13 @@ app.post("/tonnel", async (req, res) => {
     // Обновляем/вставляем floor цены для каждого подарка
     const updatePromises = items.map(item => {
       return new Promise((resolve, reject) => {
-        const price = parseFloat(item.num.replace(',', '.')) || 0;
-        
+        const floor = parseFloat(item.num.replace(',', '.')) || 0;
+        const id = item.name.replace(/[^a-zA-Z]/g, "").toLowerCase();
+
         db.run(`
-          INSERT OR REPLACE INTO gifts_floor (name, price) 
-          VALUES (?, ?)
-        `, [item.name, price], (err) => {
+          INSERT OR REPLACE INTO gifts_floor (id, name, floor) 
+          VALUES (?, ?, ?)
+        `, [id, item.name, floor], (err) => {
           if (err) {
             console.error(`Failed to update gift ${item.name}:`, err);
             reject(err);
@@ -1592,23 +1618,38 @@ app.post("/tonnel", async (req, res) => {
   }
 });
 
-// API для получения floor цен подарков
-app.get("/api/gifts/floor", async (req, res) => {
+// Эндпоинт для получения floor цен коллекций
+app.post("/api/gifts/floor", async (req, res) => {
+  const { collections } = req.body;
+
+  if (!collections || !Array.isArray(collections)) {
+    return res.status(400).json({ error: "Collections array required" });
+  }
+
   try {
     const db = await dbPool.getConnection();
+    const floorPrices = {};
 
-    const gifts = await new Promise((resolve, reject) => {
-      db.all("SELECT name, price FROM gifts_floor ORDER BY price DESC", (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows);
+    const promises = collections.map(collection => {
+      return new Promise((resolve) => {
+        // Ищем по столбцу id вместо name
+        db.get("SELECT floor FROM gifts_floor WHERE id = ?", [collection], (err, row) => {
+          if (err || !row) {
+            floorPrices[collection] = '0';
+          } else {
+            floorPrices[collection] = row.floor.toString();
+          }
+          resolve();
+        });
       });
     });
 
+    await Promise.all(promises);
     dbPool.releaseConnection(db);
-    res.json({ gifts });
 
+    res.json(floorPrices);
   } catch (error) {
-    console.error("Failed to get gift floor prices:", error);
+    console.error("Failed to get floor prices:", error);
     res.status(500).json({ error: "Database error" });
   }
 });
