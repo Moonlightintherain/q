@@ -65,6 +65,8 @@ export default function Profile({ userId, user, setUser }) {
   const [withdrawalAmount, setWithdrawalAmount] = useState('');
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [activeAction, setActiveAction] = useState(null); // null | "deposit" | "withdraw"
+  const [gifts, setGifts] = useState([]);
+const [giftsFloorPrices, setGiftsFloorPrices] = useState({});
 
   // Smart logger (автоматически включается/отключается через config)
   const { debugData, logInfo, logSuccess, logError, logWarning, showDebug, closeDebug, clearLogs } = useSmartLogger();
@@ -352,9 +354,45 @@ export default function Profile({ userId, user, setUser }) {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => {
-    if (userId) loadUser(userId);
-  }, [userId]);
+const loadUserGifts = async (userId) => {
+  try {
+    // Получаем подарки пользователя
+    const userResponse = await fetch(`${API}/api/user/${userId}/gifts`);
+    if (!userResponse.ok) return;
+    
+    const userData = await userResponse.json();
+    const userGifts = userData.gifts || [];
+    
+    if (userGifts.length === 0) {
+      setGifts([]);
+      return;
+    }
+    
+    // Получаем floor цены для коллекций
+    const collections = [...new Set(userGifts.map(gift => gift.split('-')[0]))];
+    const floorResponse = await fetch(`${API}/api/gifts/floor`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ collections })
+    });
+    
+    if (floorResponse.ok) {
+      const floorData = await floorResponse.json();
+      setGiftsFloorPrices(floorData);
+    }
+    
+    setGifts(userGifts);
+  } catch (error) {
+    console.error('Failed to load gifts:', error);
+  }
+};
+
+useEffect(() => {
+  if (userId) {
+    loadUser(userId);
+    loadUserGifts(userId);
+  }
+}, [userId]);
 
   const handleRefresh = () => {
     if (!userId) return;
@@ -435,6 +473,55 @@ export default function Profile({ userId, user, setUser }) {
               </button>
             </div>
           )}
+        </div>
+      </div>
+
+{/* Мои подарки */}
+      <div className="flex-none mb-8">
+        <div className="glass-card p-6">
+          <div className="text-sm text-gray-400 mb-4">Мои подарки:</div>
+          <div className="flex overflow-x-auto gap-3 pb-2">
+            {gifts.map((gift, index) => {
+              const collection = gift.split('-')[0];
+              const floorPrice = giftsFloorPrices[collection] || '0';
+              const imageUrl = `https://nft.fragment.com/gift/${gift}.small.jpg`;
+              
+              return (
+                <div key={index} className="flex-none">
+                  <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-800 border border-gray-700">
+                    <img
+                      src={imageUrl}
+                      alt={gift}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.target.src = '/placeholder-gift.png'; // fallback изображение
+                      }}
+                    />
+                  </div>
+                  <div className="text-xs text-center mt-1 flex items-center justify-center">
+                    <span>{formatTon(floorPrice)}</span>
+                    <Ton className="w-3 h-3 ml-1" />
+                  </div>
+                </div>
+              );
+            })}
+            
+            {/* Кнопка добавления */}
+            <div className="flex-none">
+              <button
+                onClick={() => {
+                  // TODO: открыть компонент для добавления подарков
+                  console.log('Open gifts selection');
+                }}
+                className="w-16 h-16 rounded-lg bg-gray-800 border border-gray-700 border-dashed flex items-center justify-center text-gray-400 hover:text-white hover:border-gray-500 transition-colors"
+              >
+                <span className="text-2xl">+</span>
+              </button>
+              <div className="text-xs text-center mt-1 text-transparent">
+                0<Ton className="w-3 h-3 ml-1 opacity-0" />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
