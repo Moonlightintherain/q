@@ -352,20 +352,24 @@ export default function Crash({ userId, user, setUser }) {
         <div className={`multiplier ${centerColor} game-element`}>{centerDisplay}</div>
 
         {/* History display */}
-        <div className="mt-3 flex gap-1 flex-wrap justify-center max-w-full overflow-hidden">
-          {history.slice(0, 10).map((mult, idx) => (
+        <div className="mt-3 flex gap-1 overflow-x-auto whitespace-nowrap max-w-full scrollbar-hide">
+          {history.slice(0, 100).map((mult, idx) => (
             <span
               key={idx}
-              className={`px-2 py-1 rounded glass-card text-xs game-element ${mult >= 2.0 ? 'neon-text-green' :
-                  mult >= 1.5 ? 'text-yellow-400' :
-                    'text-red-400'
+              className={`px-2 py-1 rounded glass-card text-xs game-element ${mult >= 2.0
+                ? "neon-text-green"
+                : mult >= 1.5
+                  ? "text-yellow-400"
+                  : "text-red-400"
                 }`}
             >
               {Number(mult).toFixed(2)}x
             </span>
           ))}
           {history.length === 0 && (
-            <span className="text-gray-500 text-xs">История множителей</span>
+            <span className="text-gray-500 text-xs">
+              История множителей
+            </span>
           )}
         </div>
       </div>
@@ -383,8 +387,8 @@ export default function Crash({ userId, user, setUser }) {
                   <div
                     key={`${b.userId}-${i}`}
                     className={`flex items-center justify-between py-2 px-3 rounded-lg text-sm transition-all ${isMyBet
-                        ? "bg-gradient-to-r from-pink-500/10 to-cyan-500/10 border border-pink-500/20"
-                        : "bg-[rgba(255,255,255,0.02)] hover:bg-[rgba(255,255,255,0.05)]"
+                      ? "bg-gradient-to-r from-pink-500/10 to-cyan-500/10 border border-pink-500/20"
+                      : "bg-[rgba(255,255,255,0.02)] hover:bg-[rgba(255,255,255,0.05)]"
                       }`}
                   >
                     <div className="flex items-center gap-3">
