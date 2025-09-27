@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import "./Roulette.css";
+import { useTheme } from '../hooks/useTheme';
 
 const API = import.meta.env.VITE_API_URL;
 
@@ -77,6 +78,7 @@ function describeArc(x, y, radius, startAngle, endAngle) {
 }
 
 export default function Roulette({ userId, user, setUser }) {
+  const { isLight, isDark, theme } = useTheme();
   const [bet, setBet] = useState("");
   const [status, setStatus] = useState("waiting");
   const [countdown, setCountdown] = useState(null);
