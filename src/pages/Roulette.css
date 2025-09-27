@@ -1,88 +1,75 @@
-/* Общие неоновые тексты */
+/* ==============================Updated Roulette.css - теперь использует CSS переменные из основной темы */
+
+/* Общие неоновые тексты - используем переменные из основной темы */
 .neon-text {
-  color: #00ffff;
-  text-shadow:
-    0 0 5px #00ffff,
-    0 0 10px #00ffff,
-    0 0 20px #00ffff,
-    0 0 40px #00ffff;
+  color: var(--text-primary);
+  text-shadow: 0 0 5px var(--neon-cyan), 0 0 10px var(--neon-cyan), 0 0 20px var(--neon-cyan);
+}
+
+[data-theme="light"] .neon-text {
+  text-shadow: 0 0 3px var(--neon-cyan), 0 0 8px var(--neon-cyan), 0 0 15px var(--neon-cyan);
 }
 
 /* Акцентный цвет для больших чисел/баланса */
 .neon-accent {
-  color: #ff00ff;
-  text-shadow:
-    0 0 5px #ff00ff,
-    0 0 10px #ff00ff,
-    0 0 20px #ff00ff,
-    0 0 40px #ff00ff;
+  color: var(--text-accent);
+  text-shadow: 0 0 5px var(--neon-pink), 0 0 10px var(--neon-pink), 0 0 20px var(--neon-pink);
 }
 
-/* Кнопки неоновые */
+[data-theme="light"] .neon-accent {
+  text-shadow: 0 0 3px var(--neon-pink), 0 0 8px var(--neon-pink), 0 0 15px var(--neon-pink);
+}
+
+/* Кнопки неоновые - наследуются из основных стилей */
 .neon-btn {
-  background-color: #111827;
-  border: 2px solid #00ffff;
-  color: #00ffff;
+  background: var(--bg-card);
+  border: 2px solid var(--bg-card-border);
+  color: var(--text-primary);
   font-weight: bold;
   padding: 0.5rem 1rem;
   border-radius: 0.5rem;
   cursor: pointer;
-  transition: 0.2s;
-}
-
-.neon-btn:hover {
-  background-color: #00ffff;
-  color: #111827;
-  box-shadow:
-    0 0 5px #00ffff,
-    0 0 10px #00ffff,
-    0 0 20px #00ffff,
-    0 0 40px #00ffff;
+  transition: all 0.2s ease;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Кнопка желтая (для ставок) */
 .neon-btn-yellow {
-  border-color: #FFD700;
-  color: #FFD700;
-}
-
-.neon-btn-yellow:hover {
-  background-color: #FFD700;
-  color: #111827;
-  box-shadow:
-    0 0 5px #FFD700,
-    0 0 10px #FFD700,
-    0 0 20px #FFD700,
-    0 0 40px #FFD700;
+  border-color: rgba(234, 179, 8, 0.3);
+  color: var(--neon-yellow);
 }
 
 /* Кнопка розовая */
 .neon-btn-pink {
-  border-color: #FF2D95;
-  color: #FF2D95;
+  border-color: rgba(225, 29, 72, 0.3);
+  color: var(--neon-pink);
 }
 
-.neon-btn-pink:hover {
-  background-color: #FF2D95;
-  color: #111827;
-  box-shadow:
-    0 0 5px #FF2D95,
-    0 0 10px #FF2D95,
-    0 0 20px #FF2D95,
-    0 0 40px #FF2D95;
-}
-
-/* Инпут неоновый - responsive */
+/* Инпут неоновый - responsive и адаптивный к теме */
 .input-neon {
-  background-color: #111827;
-  border: 2px solid #00ffff;
-  color: #00ffff;
+  background: var(--bg-card);
+  border: 2px solid var(--bg-card-border);
+  color: var(--text-primary);
   padding: 0.5rem;
   border-radius: 0.5rem;
   font-weight: bold;
   text-align: center;
-  transition: 0.2s;
+  transition: all 0.2s ease;
   min-height: 44px; /* Touch-friendly minimum */
+  width: 100%;
+}
+
+.input-neon::placeholder {
+  color: var(--text-muted);
+}
+
+.input-neon:focus {
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 0 1px var(--neon-cyan);
+  outline: none;
 }
 
 @media (max-width: 640px) {
@@ -92,14 +79,15 @@
   }
 }
 
-/* Список ставок - более компактный */
+/* Список ставок - более компактный и адаптивный к теме */
 .bg-overlay {
-  background-color: rgba(0, 0, 0, 0.45);
+  background: var(--bg-card);
   border-radius: 0.5rem;
   padding: 0.25rem;
-  border: 1px solid rgba(0,229,255,0.06);
+  border: 1px solid var(--bg-card-border);
   max-height: 20vh;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Мобильные улучшения */
@@ -122,28 +110,43 @@
   }
 }
 
-/* Цвета текста победителя/проигрыша */
+/* Цвета текста победителя/проигрыша - адаптивные к теме */
 .text-green-400 {
-  color: #39ff14;
-  text-shadow: 0 0 5px #39ff14, 0 0 10px #39ff14, 0 0 20px #39ff14;
+  color: var(--neon-green);
+  text-shadow: 0 0 5px var(--neon-green), 0 0 10px var(--neon-green), 0 0 20px var(--neon-green);
+}
+
+[data-theme="light"] .text-green-400 {
+  text-shadow: 0 0 3px var(--neon-green), 0 0 8px var(--neon-green);
 }
 
 .text-yellow-400 {
-  color: #FFD700;
-  text-shadow: 0 0 5px #FFD700, 0 0 10px #FFD700, 0 0 20px #FFD700;
+  color: var(--neon-yellow);
+  text-shadow: 0 0 5px var(--neon-yellow), 0 0 10px var(--neon-yellow), 0 0 20px var(--neon-yellow);
 }
 
-/* Центр круга и стрелка */
+[data-theme="light"] .text-yellow-400 {
+  text-shadow: 0 0 3px var(--neon-yellow), 0 0 8px var(--neon-yellow);
+}
+
+/* Центр круга и стрелка - адаптивные цвета */
 .wheel-center {
   width: 1rem;
   height: 1rem;
-  background-color: #fff;
+  background-color: var(--text-secondary);
   border-radius: 50%;
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
   z-index: 20;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="light"] .wheel-center {
+  background-color: var(--bg-primary);
+  border: 2px solid var(--text-primary);
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
 }
 
 .wheel-pointer {
@@ -151,15 +154,72 @@
   height: 0;
   border-left: 10px solid transparent;
   border-right: 10px solid transparent;
-  border-bottom: 20px solid #fff;
+  border-bottom: 20px solid var(--text-secondary);
   position: absolute;
   top: 0;
   left: 50%;
   transform: translateX(-50%);
   z-index: 10;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+[data-theme="light"] .wheel-pointer {
+  border-bottom-color: var(--text-primary);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
 }
 
 /* Добавляем неоновый эффект для своей доли на колесе */
 .my-slice-neon {
   /* Эффект внутренней тени теперь реализуется через SVG-фильтр */
+  filter: url(#inner-neon-glow);
+}
+
+/* Дополнительные стили для светлой темы */
+[data-theme="light"] .my-slice-neon {
+  filter: url(#inner-light-glow);
+}
+
+/* SVG фильтры для разных тем нужно будет добавить в компонент */
+
+/* Адаптация цветов для различных состояний в светлой теме */
+[data-theme="light"] .text-red-400 {
+  color: #dc2626;
+}
+
+[data-theme="light"] .text-red-500 {
+  color: #dc2626;
+}
+
+[data-theme="light"] .text-cyan-100 {
+  color: var(--text-secondary);
+}
+
+/* Стили для таймера обратного отсчета - адаптивные к теме */
+.countdown-timer {
+  color: var(--neon-yellow);
+  text-shadow: 0 0 10px var(--neon-yellow);
+}
+
+[data-theme="light"] .countdown-timer {
+  text-shadow: 0 0 5px var(--neon-yellow);
+}
+
+/* Анимация вращения колеса */
+.wheel-spinning {
+  transition: transform 8s cubic-bezier(0.2, 0.8, 0.5, 1);
+}
+
+/* Скроллбары для светлой темы */
+[data-theme="light"] .bg-overlay::-webkit-scrollbar {
+  width: 6px;
+}
+
+[data-theme="light"] .bg-overlay::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+  border-radius: 3px;
+}
+
+[data-theme="light"] .bg-overlay::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  border-radius: 3px;
 }
