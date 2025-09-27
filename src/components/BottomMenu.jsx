@@ -1,6 +1,8 @@
 import React from "react";
+import { useTheme } from '../hooks/useTheme';
 
 export default function BottomMenu({ activePage, setActivePage }) {
+  const { isLight, isDark, theme } = useTheme();
   return (
     <div className="w-full max-w-3xl p-2 sm:py-3 bottom-rail glass-card flex items-center justify-between">
       <button
