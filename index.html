@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
-    <title>Ton Kazino</title>
+    <title>TON Kazino</title>
     <script src="https://telegram.org/js/telegram-web-app.js?59"></script>
     
     <!-- Meta tags for Telegram WebApp -->
@@ -20,6 +20,77 @@
     
     <!-- Ensure ton_logo.svg is accessible -->
     <link rel="preload" href="/ton_logo.svg" as="image" type="image/svg+xml">
+    
+    <!-- Theme Detection Script - Must be before styles -->
+    <script>
+      // Function to detect and apply Telegram theme immediately
+      function detectAndApplyTelegramTheme() {
+        let detectedTheme = 'dark'; // fallback
+        
+        if (window.Telegram && window.Telegram.WebApp) {
+          const tg = window.Telegram.WebApp;
+          console.log('🎨 Detecting theme from Telegram WebApp...');
+          
+          // Method 1: Check colorScheme directly
+          if (tg.colorScheme) {
+            detectedTheme = tg.colorScheme;
+            console.log('✅ Theme detected from colorScheme:', detectedTheme);
+          }
+          // Method 2: Check themeParams background brightness
+          else if (tg.themeParams && tg.themeParams.bg_color) {
+            const bgColor = tg.themeParams.bg_color;
+            const hex = bgColor.replace('#', '');
+            const r = parseInt(hex.substr(0, 2), 16);
+            const g = parseInt(hex.substr(2, 2), 16);
+            const b = parseInt(hex.substr(4, 2), 16);
+            const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+            
+            detectedTheme = brightness > 128 ? 'light' : 'dark';
+            console.log('✅ Theme detected from bg_color brightness:', detectedTheme, `(${brightness})`);
+          }
+          // Method 3: Check text color as fallback
+          else if (tg.themeParams && tg.themeParams.text_color) {
+            const textColor = tg.themeParams.text_color;
+            const hex = textColor.replace('#', '');
+            const r = parseInt(hex.substr(0, 2), 16);
+            const g = parseInt(hex.substr(2, 2), 16);
+            const b = parseInt(hex.substr(4, 2), 16);
+            const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+            
+            // If text is light, background is probably dark
+            detectedTheme = brightness > 128 ? 'dark' : 'light';
+            console.log('✅ Theme detected from text_color brightness:', detectedTheme, `(text: ${brightness})`);
+          }
+        } else {
+          // Fallback for non-Telegram environment
+          if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+            detectedTheme = 'light';
+          }
+          console.log('⚠️ Not in Telegram, using system preference:', detectedTheme);
+        }
+        
+        // Apply theme immediately to html element
+        document.documentElement.setAttribute('data-theme', detectedTheme);
+        
+        // Store theme for React app
+        window.__INITIAL_THEME__ = detectedTheme;
+        
+        console.log('🎨 Applied initial theme:', detectedTheme);
+        return detectedTheme;
+      }
+
+      // Apply theme as soon as possible
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', detectAndApplyTelegramTheme);
+      } else {
+        detectAndApplyTelegramTheme();
+      }
+      
+      // Also try to detect theme immediately if Telegram is already available
+      if (window.Telegram && window.Telegram.WebApp) {
+        detectAndApplyTelegramTheme();
+      }
+    </script>
     
     <style>
       /* Prevent any default margins/padding that might interfere with fullscreen */
@@ -46,42 +117,82 @@
         }
       }
       
-      /* Loading state */
+      /* CSS Variables for themes */
+      :root {
+        /* Dark theme (default) */
+        --loading-bg: linear-gradient(135deg, #050014 0%, #0b0024 100%);
+        --loading-text: #00e5ff;
+        --loading-spinner: #00e5ff;
+        --loading-spinner-track: rgba(0,229,255,0.3);
+      }
+      
+      /* Light theme variables */
+      [data-theme="light"] {
+        --loading-bg: linear-gradient(135deg, #fef7ff 0%, #f0f9ff 50%, #f0fdf4 100%);
+        --loading-text: #1e293b;
+        --loading-spinner: #ec4899;
+        --loading-spinner-track: rgba(236, 72, 153, 0.3);
+      }
+      
+      /* Loading state with theme support */
       #loading {
         position: fixed;
         top: 0;
         left: 0;
         width: 100%;
         height: 100%;
-        background: linear-gradient(135deg, #050014 0%, #0b0024 100%);
+        background: var(--loading-bg);
         display: flex;
         align-items: center;
         justify-content: center;
-        color: #00e5ff;
+        color: var(--loading-text);
         font-family: 'Orbitron', sans-serif;
         z-index: 9999;
+        transition: opacity 0.3s ease;
       }
       
       .loading-spinner {
         width: 40px;
         height: 40px;
-        border: 3px solid rgba(0,229,255,0.3);
-        border-top: 3px solid #00e5ff;
+        border: 3px solid var(--loading-spinner-track);
+        border-top: 3px solid var(--loading-spinner);
         border-radius: 50%;
         animation: spin 1s linear infinite;
         margin-right: 15px;
+      }
+      
+      .loading-text {
+        font-size: 16px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+      }
+      
+      /* Light theme loading adjustments */
+      [data-theme="light"] .loading-text {
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
       }
       
       @keyframes spin {
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
       }
+      
+      /* Smooth theme transitions */
+      html {
+        transition: background-color 0.2s ease;
+      }
+      
+      /* Body background that matches theme immediately */
+      body {
+        background: var(--loading-bg);
+        transition: background 0.2s ease;
+      }
     </style>
   </head>
   <body class="font-display">
     <div id="loading">
       <div class="loading-spinner"></div>
-      <span>Загрузка Ton Kazino...</span>
+      <span class="loading-text">Загрузка...</span>
     </div>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx?v=3"></script>
@@ -98,17 +209,59 @@
         }, 1000);
       });
       
-      // Telegram WebApp initialization
+      // Enhanced Telegram WebApp initialization with theme handling
       if (window.Telegram && window.Telegram.WebApp) {
         const tg = window.Telegram.WebApp;
         tg.ready();
         tg.expand();
         
-        // Set theme
-        if (tg.themeParams) {
-          document.documentElement.style.setProperty('--tg-theme-bg-color', tg.themeParams.bg_color || '#050014');
-          document.documentElement.style.setProperty('--tg-theme-text-color', tg.themeParams.text_color || '#ffffff');
-        }
+        // Apply theme colors from Telegram
+        const applyTelegramTheme = () => {
+          if (tg.themeParams) {
+            const params = tg.themeParams;
+            
+            // Set CSS custom properties for Telegram theme colors
+            if (params.bg_color) {
+              document.documentElement.style.setProperty('--tg-theme-bg-color', params.bg_color);
+            }
+            if (params.text_color) {
+              document.documentElement.style.setProperty('--tg-theme-text-color', params.text_color);
+            }
+            if (params.hint_color) {
+              document.documentElement.style.setProperty('--tg-theme-hint-color', params.hint_color);
+            }
+            if (params.link_color) {
+              document.documentElement.style.setProperty('--tg-theme-link-color', params.link_color);
+            }
+            if (params.button_color) {
+              document.documentElement.style.setProperty('--tg-theme-button-color', params.button_color);
+            }
+            if (params.button_text_color) {
+              document.documentElement.style.setProperty('--tg-theme-button-text-color', params.button_text_color);
+            }
+            
+            console.log('🎨 Applied Telegram theme colors:', params);
+          }
+        };
+        
+        // Apply theme initially
+        applyTelegramTheme();
+        
+        // Listen for theme changes
+        tg.onEvent('themeChanged', () => {
+          console.log('🎨 Telegram theme changed, redetecting...');
+          detectAndApplyTelegramTheme();
+          applyTelegramTheme();
+        });
+        
+        // Handle viewport changes
+        const handleViewportChange = () => {
+          const height = tg.viewportHeight || window.innerHeight;
+          document.documentElement.style.setProperty('--tg-viewport-height', `${height}px`);
+        };
+        
+        tg.onEvent('viewportChanged', handleViewportChange);
+        handleViewportChange();
       }
     </script>
   </body>
