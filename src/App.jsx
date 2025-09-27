@@ -5,17 +5,39 @@ import Roulette from "./pages/Roulette";
 import Profile from "./pages/Profile";
 import { initTelegram } from "./telegram-client";
 import { TonConnectProvider } from "./components/TonConnectProvider";
+import { useTheme } from "./hooks/useTheme";
 import { config } from "./config";
 
 const API = config.apiUrl;
 
-
 function TonLogo({ className = "w-6 h-6 sm:w-8 sm:h-8" }) {
-  // Исправляем путь к логотипу - добавляем /src/ для корректной загрузки
-  return <img src="/ton_logo.svg" alt="TON" className={className} onError={(e) => {
-    // Fallback на случай если логотип не загрузится
-    e.target.style.display = 'none';
-  }} />;
+  const { isLight } = useTheme();
+  
+  // Создаем динамические стили для логотипа в зависимости от темы
+  const logoStyle = isLight ? {
+    filter: 'brightness(0.2) sepia(1) saturate(5) hue-rotate(200deg)'
+  } : {};
+
+  return <img 
+    src="/ton_logo.svg" 
+    alt="TON" 
+    className={className} 
+    style={logoStyle}
+    onError={(e) => {
+      // Fallback на случай если логотип не загрузится
+      e.target.style.display = 'none';
+    }} 
+  />;
+}
+
+// Компонент индикатора загрузки темы
+function ThemeLoader() {
+  return (
+    <div className="flex-1 flex items-center justify-center">
+      <div className="loading-spinner"></div>
+      <span className="ml-3 neon-text">Загрузка темы...</span>
+    </div>
+  );
 }
 
 export default function App() {
@@ -24,6 +46,9 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [viewportHeight, setViewportHeight] = useState(window.innerHeight);
+  
+  // Используем хук темы
+  const { theme, isLight, isDark, isLoading: themeLoading } = useTheme();
 
   // инициализация Telegram и viewport
   useEffect(() => {
@@ -136,58 +161,74 @@ export default function App() {
       });
   }, [userId]);
 
+  // Показываем загрузчик пока загружается тема
+  if (themeLoading) {
+    return (
+      <TonConnectProvider>
+        <div className="flex flex-col w-full min-h-screen" style={{ height: 'var(--tg-viewport-height, 100vh)' }}>
+          <ThemeLoader />
+        </div>
+      </TonConnectProvider>
+    );
+  }
+
   return (
     <TonConnectProvider>
       <div className="flex flex-col w-full min-h-screen" style={{ height: 'var(--tg-viewport-height, 100vh)', paddingBottom: '40px'}}>
-  {/* Header */}
-  <header className="w-full flex flex-col flex-none">
-    <div className="h-[70px]"></div>
-    <div className="w-full flex items-center justify-between px-2 py-2">
-      <div className="flex items-center">
-        <TonLogo className="w-6 h-6" />
-        <h1 className="ml-2 text-lg font-bold neon-text">Ton Kazino</h1>
-      </div>
-      {user && !user.error && (
-        <div className="text-right">
-          <div className="text-xs text-gray-400">Баланс</div>
-          <div className="text-sm neon-accent">
-            {user.balance ? Number(user.balance).toFixed(4).replace(/\.?0+$/, '') : '0'}{' '}
-            <TonLogo className="w-3 h-3 inline" />
+        {/* Header */}
+        <header className="w-full flex flex-col flex-none">
+          <div className="h-[70px]"></div>
+          <div className="w-full flex items-center justify-between px-2 py-2">
+            <div className="flex items-center">
+              <TonLogo className="w-6 h-6" />
+              <h1 className="ml-2 text-lg font-bold neon-text">Ton Kazino</h1>
+              {/* Debug indicator для разработчиков */}
+              {import.meta.env.DEV && (
+                <span className="ml-2 text-xs px-2 py-1 rounded glass-card">
+                  {theme === 'light' ? '☀️' : '🌙'} {theme}
+                </span>
+              )}
+            </div>
+            {user && !user.error && (
+              <div className="text-right">
+                <div className="text-xs text-gray-400">Баланс</div>
+                <div className="text-sm neon-accent">
+                  {user.balance ? Number(user.balance).toFixed(4).replace(/\.?0+$/, '') : '0'}{' '}
+                  <TonLogo className="w-3 h-3 inline" />
+                </div>
+              </div>
+            )}
           </div>
+        </header>
+
+        {/* Main content */}
+        <main className="flex-1 flex flex-col w-full px-2 pb-2 pt-0 overflow-y-auto">
+          {loadingAuth ? (
+            <div className="flex-1 flex items-center justify-center">
+              <span className="neon-text">Авторизация...</span>
+            </div>
+          ) : user && user.error ? (
+            <div className="flex-1 flex items-center justify-center">
+              <span className="text-red-400">{user.error}</span>
+            </div>
+          ) : !user ? (
+            <div className="flex-1 flex items-center justify-center">
+              <span className="text-red-400">Ошибка загрузки пользователя</span>
+            </div>
+          ) : (
+            <>
+              {activePage === "crash" && <Crash userId={userId} user={user} setUser={setUser} />}
+              {activePage === "roulette" && <Roulette userId={userId} user={user} setUser={setUser} />}
+              {activePage === "profile" && <Profile userId={userId} user={user} setUser={setUser} />}
+            </>
+          )}
+        </main>
+
+        {/* BottomMenu */}
+        <div className="w-full px-2 py-0 flex justify-center flex-none">
+          <BottomMenu activePage={activePage} setActivePage={setActivePage} />
         </div>
-      )}
-    </div>
-  </header>
-
-  {/* Main content */}
-  <main className="flex-1 flex flex-col w-full px-2 pb-2 pt-0 overflow-y-auto">
-    {loadingAuth ? (
-      <div className="flex-1 flex items-center justify-center">
-        <span className="neon-text">Авторизация...</span>
       </div>
-    ) : user && user.error ? (
-      <div className="flex-1 flex items-center justify-center">
-        <span className="text-red-400">{user.error}</span>
-      </div>
-    ) : !user ? (
-      <div className="flex-1 flex items-center justify-center">
-        <span className="text-red-400">Ошибка загрузки пользователя</span>
-      </div>
-    ) : (
-      <>
-        {activePage === "crash" && <Crash userId={userId} user={user} setUser={setUser} />}
-        {activePage === "roulette" && <Roulette userId={userId} user={user} setUser={setUser} />}
-        {activePage === "profile" && <Profile userId={userId} user={user} setUser={setUser} />}
-      </>
-    )}
-  </main>
-
-  {/* BottomMenu */}
-  <div className="w-full px-2 py-0 flex justify-center flex-none">
-    <BottomMenu activePage={activePage} setActivePage={setActivePage} />
-  </div>
-</div>
-
-    </TonConnectProvider >
+    </TonConnectProvider>
   );
 }
