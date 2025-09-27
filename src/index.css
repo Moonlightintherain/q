@@ -4,11 +4,42 @@
 
 /* --- кастомные стили киберпанк --- */
 :root {
+  /* Dark theme (default) */
   --neon-green: #39ff14;
   --neon-pink: #ff2d95;
   --neon-cyan: #00e5ff;
+  --neon-yellow: #ffd700;
   --bg-circle-color: #050014;
   --tg-viewport-height: 100vh;
+  
+  /* Dark theme colors */
+  --bg-primary: #050014;
+  --bg-secondary: #0b0024;
+  --bg-card: rgba(255, 255, 255, 0.02);
+  --bg-card-border: rgba(57, 255, 20, 0.08);
+  --text-primary: #00e5ff;
+  --text-secondary: #ffffff;
+  --text-muted: #64748b;
+  --text-accent: #ff2d95;
+}
+
+/* Light theme */
+[data-theme="light"] {
+  --neon-green: #10b981;
+  --neon-pink: #ec4899; 
+  --neon-cyan: #06b6d4;
+  --neon-yellow: #f59e0b;
+  --bg-circle-color: #fef7ff;
+  
+  /* Beautiful gradient light theme colors */
+  --bg-primary: linear-gradient(135deg, #fef7ff 0%, #f0f9ff 50%, #f0fdf4 100%);
+  --bg-secondary: linear-gradient(135deg, #fce7f3 0%, #dbeafe 50%, #dcfce7 100%);
+  --bg-card: rgba(255, 255, 255, 0.8);
+  --bg-card-border: rgba(236, 72, 153, 0.2);
+  --text-primary: #1e293b;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --text-accent: #ec4899;
 }
 
 /* Fullscreen mobile optimization */
@@ -24,10 +55,10 @@ body,
 }
 
 body {
-  /*@apply bg-gradient-to-br from-cyberBgStart to-cyberBgEnd text-cyan-100;*/
-  background: #050014;
+  background: var(--bg-primary);
   background-attachment: fixed;
   font-family: 'Orbitron', system-ui, sans-serif;
+  color: var(--text-secondary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
@@ -47,14 +78,13 @@ body {
 }
 
 html {
-  /*background: linear-gradient(to bottom right, #050014, #0b0024);*/
-  background: #050014;
+  background: var(--bg-primary);
   background-attachment: fixed;
 }
 
 /* Добавить также резервный вариант без поддержки env() */
 body {
-  background: #050014;
+  background: var(--bg-primary);
   background-attachment: fixed;
   /* Отступ сверху - изменяй это значение */
   padding-top: 0px;
@@ -69,25 +99,29 @@ body {
 
 /* фоновая анимация — мягкий движущийся градиент */
 .bg-shift {
-  background: linear-gradient(180deg, rgb(0, 0, 0), rgb(20, 0, 47));
+  background: linear-gradient(180deg, var(--bg-primary), var(--bg-secondary));
   position: absolute;
   inset: 0;
   z-index: -2;
-  animation: shift 12s linear infinite;
+  animation: shift 15s ease infinite;
+}
+
+/* Light theme background shift */
+[data-theme="light"] .bg-shift {
+  background: linear-gradient(45deg, 
+    rgba(254, 247, 255, 0.9) 0%, 
+    rgba(240, 249, 255, 0.9) 25%,
+    rgba(240, 253, 244, 0.9) 50%,
+    rgba(252, 231, 243, 0.9) 75%,
+    rgba(254, 247, 255, 0.9) 100%);
+  background-size: 400% 400%;
+  animation: shift 15s ease infinite;
 }
 
 @keyframes shift {
-  0% {
-    background-position: 0% 50%
-  }
-
-  50% {
-    background-position: 100% 50%
-  }
-
-  100% {
-    background-position: 0% 50%
-  }
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
 
 /* декоративный шум */
@@ -102,91 +136,183 @@ body {
   z-index: -1;
 }
 
+/* Light theme noise */
+[data-theme="light"] .noise:after {
+  background-image: 
+    radial-gradient(circle at 25% 25%, rgba(236, 72, 153, 0.02) 1px, transparent 1px),
+    radial-gradient(circle at 75% 75%, rgba(6, 182, 212, 0.02) 1px, transparent 1px);
+  background-size: 3px 3px, 5px 5px;
+}
+
 /* стеклянные панели */
 .glass-card {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01));
-  border: 1px solid rgba(57, 255, 20, 0.08);
+  background: linear-gradient(180deg, var(--bg-card), var(--bg-card));
+  border: 1px solid var(--bg-card-border);
   backdrop-filter: blur(8px) saturate(120%);
   -webkit-backdrop-filter: blur(8px) saturate(120%);
   border-radius: 16px;
-  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.6), 0 0 30px rgba(57, 255, 20, 0.02);
+  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.6), 0 0 30px var(--bg-card-border);
+}
+
+/* Light theme glass cards */
+[data-theme="light"] .glass-card {
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.9) 0%, 
+    rgba(254, 247, 255, 0.8) 50%,
+    rgba(240, 249, 255, 0.9) 100%);
+  border: 1px solid rgba(236, 72, 153, 0.15);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: 
+    0 8px 32px rgba(236, 72, 153, 0.1),
+    0 2px 16px rgba(6, 182, 212, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
 /* неоновый текст */
 .neon-text {
-  color: var(--neon-cyan);
-  text-shadow: 0 0 6px rgba(0, 229, 255, 0.55), 0 0 16px rgba(0, 229, 255, 0.25);
+  color: var(--text-primary);
+  text-shadow: 0 0 6px var(--neon-cyan), 0 0 16px rgba(14, 165, 233, 0.25);
+}
+
+[data-theme="light"] .neon-text {
+  text-shadow: 0 0 3px var(--neon-cyan), 0 0 8px rgba(14, 165, 233, 0.15);
 }
 
 .neon-accent {
-  color: var(--neon-pink);
-  text-shadow: 0 0 6px rgba(255, 45, 149, 0.45), 0 0 14px rgba(255, 45, 149, 0.18);
+  color: var(--text-accent);
+  text-shadow: 0 0 6px var(--neon-pink), 0 0 14px rgba(225, 29, 72, 0.18);
+}
+
+[data-theme="light"] .neon-accent {
+  text-shadow: 0 0 3px var(--neon-pink), 0 0 8px rgba(225, 29, 72, 0.15);
 }
 
 .neon-text-green {
-  color: #39ff14;
-  text-shadow: 0 0 6px rgba(57, 255, 20, 0.55), 0 0 16px rgba(57, 255, 20, 0.25);
+  color: var(--neon-green);
+  text-shadow: 0 0 6px var(--neon-green), 0 0 16px rgba(34, 197, 94, 0.25);
+}
+
+[data-theme="light"] .neon-text-green {
+  text-shadow: 0 0 3px var(--neon-green), 0 0 8px rgba(34, 197, 94, 0.15);
 }
 
 .neon-text-red {
-  color: #ff2d95;
-  text-shadow: 0 0 6px rgba(255, 45, 149, 0.55), 0 0 16px rgba(255, 45, 149, 0.25);
+  color: var(--neon-pink);
+  text-shadow: 0 0 6px var(--neon-pink), 0 0 16px rgba(225, 29, 72, 0.25);
+}
+
+[data-theme="light"] .neon-text-red {
+  text-shadow: 0 0 3px var(--neon-pink), 0 0 8px rgba(225, 29, 72, 0.15);
 }
 
 /* неоновые кнопки */
 .neon-btn {
   @apply px-4 py-3 rounded-xl font-semibold tracking-wide transition-all;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01));
+  background: linear-gradient(90deg, var(--bg-card), var(--bg-card));
   border: 1px solid rgba(255, 255, 255, 0.06);
-  color: #00e5ff;
-  /* Светлый неоновый цвет */
+  color: var(--text-primary);
   min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
+[data-theme="light"] .neon-btn {
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.8) 0%, 
+    rgba(254, 247, 255, 0.6) 100%);
+  border: 2px solid rgba(30, 41, 59, 0.1);
+  box-shadow: 
+    0 4px 15px rgba(0, 0, 0, 0.05),
+    inset 0 1px 3px rgba(255, 255, 255, 0.8);
+}
+
 .neon-btn:active {
-  box-shadow: 0 0 15px #00e5ff, 0 0 25px #00e5ff, 0 0 35px #00e5ff;
+  box-shadow: 0 0 15px var(--neon-cyan), 0 0 25px var(--neon-cyan), 0 0 35px var(--neon-cyan);
+}
+
+[data-theme="light"] .neon-btn:active {
+  box-shadow: 0 0 8px var(--neon-cyan), 0 0 15px var(--neon-cyan), 0 0 20px var(--neon-cyan);
 }
 
 .neon-btn-green {
-  color: #39ff14;
-  /* Светлый зеленый */
-  border-color: rgba(57, 255, 20, 0.18);
+  color: var(--neon-green);
+  border-color: rgba(34, 197, 94, 0.18);
+}
+
+[data-theme="light"] .neon-btn-green {
+  border-color: rgba(16, 185, 129, 0.3);
+  background: linear-gradient(135deg, 
+    rgba(220, 252, 231, 0.8) 0%, 
+    rgba(255, 255, 255, 0.8) 100%);
 }
 
 .neon-btn-green:active {
-  box-shadow: 0 0 15px #39ff14, 0 0 25px #39ff14, 0 0 35px #39ff14;
+  box-shadow: 0 0 15px var(--neon-green), 0 0 25px var(--neon-green), 0 0 35px var(--neon-green);
+}
+
+[data-theme="light"] .neon-btn-green:active {
+  box-shadow: 0 0 8px var(--neon-green), 0 0 15px var(--neon-green), 0 0 20px var(--neon-green);
 }
 
 .neon-btn-pink {
-  color: #ff2d95;
-  /* Светлый розовый */
-  border-color: rgba(255, 45, 149, 0.18);
+  color: var(--neon-pink);
+  border-color: rgba(225, 29, 72, 0.18);
+}
+
+[data-theme="light"] .neon-btn-pink {
+  border-color: rgba(236, 72, 153, 0.3);
+  background: linear-gradient(135deg, 
+    rgba(252, 231, 243, 0.8) 0%, 
+    rgba(255, 255, 255, 0.8) 100%);
 }
 
 .neon-btn-pink:active {
-  box-shadow: 0 0 15px #ff2d95, 0 0 25px #ff2d95, 0 0 35px #ff2d95;
+  box-shadow: 0 0 15px var(--neon-pink), 0 0 25px var(--neon-pink), 0 0 35px var(--neon-pink);
+}
+
+[data-theme="light"] .neon-btn-pink:active {
+  box-shadow: 0 0 8px var(--neon-pink), 0 0 15px var(--neon-pink), 0 0 20px var(--neon-pink);
 }
 
 .neon-btn-yellow {
-  color: #ffd700;
-  /* Светлый желтый */
-  border-color: rgba(255, 210, 0, 0.18);
+  color: var(--neon-yellow);
+  border-color: rgba(234, 179, 8, 0.18);
+}
+
+[data-theme="light"] .neon-btn-yellow {
+  border-color: rgba(245, 158, 11, 0.3);
+  background: linear-gradient(135deg, 
+    rgba(254, 243, 199, 0.8) 0%, 
+    rgba(255, 255, 255, 0.8) 100%);
 }
 
 .neon-btn-yellow:active {
-  box-shadow: 0 0 15px #ffd700, 0 0 25px #ffd700, 0 0 35px #ffd700;
+  box-shadow: 0 0 15px var(--neon-yellow), 0 0 25px var(--neon-yellow), 0 0 35px var(--neon-yellow);
+}
+
+[data-theme="light"] .neon-btn-yellow:active {
+  box-shadow: 0 0 8px var(--neon-yellow), 0 0 15px var(--neon-yellow), 0 0 20px var(--neon-yellow);
 }
 
 /* нижнее меню - адаптировано для fullscreen */
 .bottom-rail {
   background: rgba(0, 0, 0, 0.45);
-  /*border: 1px solid rgba(0, 229, 255, 0.06);*/
-  /*box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);*/
   margin-block: 8px;
   border-radius: 16px;
+}
+
+[data-theme="light"] .bottom-rail {
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.9) 0%, 
+    rgba(252, 231, 243, 0.8) 50%,
+    rgba(219, 234, 254, 0.9) 100%);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(236, 72, 153, 0.2);
+  box-shadow: 
+    0 -4px 20px rgba(236, 72, 153, 0.08),
+    0 -2px 10px rgba(6, 182, 212, 0.05);
 }
 
 /* multiplier big - увеличенный размер */
@@ -205,13 +331,21 @@ body {
 /* input styling */
 .input-neon {
   @apply w-full rounded-lg px-4 py-3 bg-transparent border;
-  border-color: rgba(255, 255, 255, 0.06);
-  color: var(--neon-cyan);
+  border-color: var(--bg-card-border);
+  color: var(--text-primary);
   outline: none;
   min-height: 44px;
-  /* Touch-friendly minimum */
   font-size: 16px;
-  /* Prevent zoom on iOS */
+  background: var(--bg-card);
+}
+
+.input-neon::placeholder {
+  color: var(--text-muted);
+}
+
+.input-neon:focus {
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 0 1px var(--neon-cyan);
 }
 
 /* Scrollable containers for bet lists */
@@ -219,6 +353,12 @@ body {
   max-height: 30vh;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+}
+
+/* Light theme bet list */
+[data-theme="light"] .bet-list-container {
+  background: rgba(248, 250, 252, 0.8);
+  border: 1px solid var(--bg-card-border);
 }
 
 /* Scrollable page containers */
@@ -241,6 +381,10 @@ body {
   border-radius: 50%;
   object-fit: cover;
   border: 2px solid rgba(0, 229, 255, 0.3);
+}
+
+[data-theme="light"] .user-avatar {
+  border: 2px solid rgba(14, 165, 233, 0.4);
 }
 
 /* Balance display in header */
@@ -278,7 +422,7 @@ body {
 .loading-spinner {
   width: 24px;
   height: 24px;
-  border: 2px solid rgba(0, 229, 255, 0.3);
+  border: 2px solid var(--bg-card-border);
   border-top: 2px solid var(--neon-cyan);
   border-radius: 50%;
   animation: spin 1s linear infinite;
@@ -292,4 +436,155 @@ body {
   100% {
     transform: rotate(360deg);
   }
+}
+
+/* Theme-specific text colors */
+[data-theme="light"] .text-gray-400 {
+  color: var(--text-muted);
+}
+
+[data-theme="light"] .text-gray-500 {
+  color: var(--text-muted);
+}
+
+[data-theme="light"] .text-cyan-100 {
+  color: var(--text-secondary);
+}
+
+[data-theme="light"] .text-red-400 {
+  color: #dc2626;
+}
+
+[data-theme="light"] .text-green-400 {
+  color: #16a34a;
+}
+
+[data-theme="light"] .text-yellow-400 {
+  color: #ca8a04;
+}
+
+[data-theme="light"] .text-red-500 {
+  color: #dc2626;
+}
+
+/* Background overlays for bet lists */
+[data-theme="light"] .bg-\[rgba\(0\,0\,0\,0\.45\)\] {
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.9) 0%, 
+    rgba(252, 231, 243, 0.7) 50%,
+    rgba(219, 234, 254, 0.9) 100%) !important;
+  border: 1px solid rgba(236, 72, 153, 0.2) !important;
+  backdrop-filter: blur(15px);
+  box-shadow: 
+    0 4px 20px rgba(236, 72, 153, 0.08),
+    inset 0 1px 3px rgba(255, 255, 255, 0.8);
+}
+
+/* Light theme bet item backgrounds */
+[data-theme="light"] .bg-\[rgba\(255\,255\,255\,0\.02\)\] {
+  background: rgba(15, 23, 42, 0.04) !important;
+}
+
+/* Additional theme-specific improvements */
+
+/* Gradient backgrounds for bet items in light theme */
+[data-theme="light"] .bg-gradient-to-r.from-pink-500\/10.to-cyan-500\/10 {
+  background: linear-gradient(to right, 
+    rgba(236, 72, 153, 0.12) 0%, 
+    rgba(6, 182, 212, 0.12) 100%) !important;
+  border: 1px solid rgba(236, 72, 153, 0.25) !important;
+  backdrop-filter: blur(10px);
+}
+
+[data-theme="light"] .border-pink-500\/20 {
+  border-color: rgba(225, 29, 72, 0.3) !important;
+}
+
+[data-theme="light"] .bg-gradient-to-r.from-green-500\/20.to-yellow-500\/20 {
+  background: linear-gradient(to right, 
+    rgba(16, 185, 129, 0.15) 0%, 
+    rgba(245, 158, 11, 0.15) 100%) !important;
+  border: 1px solid rgba(16, 185, 129, 0.4) !important;
+  box-shadow: 
+    0 4px 15px rgba(16, 185, 129, 0.1),
+    0 2px 8px rgba(245, 158, 11, 0.05);
+}
+
+[data-theme="light"] .border-green-500\/40 {
+  border-color: rgba(34, 197, 94, 0.5) !important;
+}
+
+[data-theme="light"] .shadow-green-500\/20 {
+  box-shadow: 0 10px 15px -3px rgba(34, 197, 94, 0.2), 0 4px 6px -2px rgba(34, 197, 94, 0.1) !important;
+}
+
+/* Wheel pointer and center styling for light theme */
+[data-theme="light"] .wheel-center {
+  background-color: var(--bg-primary);
+  border: 2px solid var(--text-primary);
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="light"] .wheel-pointer svg path {
+  fill: var(--text-primary);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
+/* Custom scrollbar styles for both themes */
+.bet-list-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.bet-list-container::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+}
+
+.bet-list-container::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  border-radius: 3px;
+}
+
+[data-theme="light"] .bet-list-container::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.05);
+}
+
+/* Better focus states for light theme */
+[data-theme="light"] .neon-btn:focus {
+  outline: 2px solid var(--neon-cyan);
+  outline-offset: 2px;
+}
+
+[data-theme="light"] .input-neon {
+  background: linear-gradient(135deg, 
+    rgba(255, 255, 255, 0.9) 0%, 
+    rgba(254, 247, 255, 0.8) 100%);
+  border: 2px solid rgba(236, 72, 153, 0.2);
+  box-shadow: 
+    0 4px 15px rgba(236, 72, 153, 0.05),
+    inset 0 1px 3px rgba(255, 255, 255, 0.8);
+}
+
+[data-theme="light"] .input-neon:focus {
+  border-color: rgba(236, 72, 153, 0.4);
+  box-shadow: 
+    0 0 0 3px rgba(236, 72, 153, 0.1),
+    0 4px 20px rgba(236, 72, 153, 0.1),
+    inset 0 1px 3px rgba(255, 255, 255, 0.9);
+}
+
+/* Improved loading spinner for light theme */
+[data-theme="light"] .loading-spinner {
+  border-color: var(--bg-card-border);
+  border-top-color: var(--neon-cyan);
+}
+
+/* Theme transition animation */
+* {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+/* Disable transitions during theme change to prevent flashing */
+.theme-transitioning * {
+  transition: none !important;
 }
