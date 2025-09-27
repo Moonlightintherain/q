@@ -1,5 +1,4 @@
 import sqlite3pkg from "sqlite3";
-
 const sqlite3 = sqlite3pkg.verbose();
 import path from "path";
 import { fileURLToPath } from "url";
@@ -11,6 +10,7 @@ const dbPath = path.join(__dirname, "database.sqlite");
 const db = new sqlite3.Database(dbPath);
 
 db.serialize(() => {
+  // USERS
   db.run(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY UNIQUE,
@@ -22,18 +22,43 @@ db.serialize(() => {
       photo_url TEXT
     )
   `, (err) => {
-    if (err) {
-      console.error("Failed to create users table:", err);
-      return;
-    }
-    console.log("Users table ready");
+    if (err) console.error("Failed to create users table:", err);
+    else console.log("Users table ready");
   });
 
-  // Add columns to existing table if they don't exist
-  db.run(`ALTER TABLE users ADD COLUMN username TEXT`, () => {});
-  db.run(`ALTER TABLE users ADD COLUMN first_name TEXT`, () => {});
-  db.run(`ALTER TABLE users ADD COLUMN last_name TEXT`, () => {});
-  db.run(`ALTER TABLE users ADD COLUMN photo_url TEXT`, () => {});
+  // TRANSACTIONS (AUTOINCREMENT -> sqlite_sequence создастся автоматически)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      type TEXT NOT NULL CHECK(type IN ('deposit', 'withdrawal')),
+      amount REAL NOT NULL,
+      fee REAL DEFAULT 0,
+      transaction_hash TEXT UNIQUE,
+      wallet_address TEXT,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'completed', 'failed')),
+      created_at INTEGER NOT NULL,
+      completed_at INTEGER,
+      FOREIGN KEY (user_id) REFERENCES users (id)
+    )
+  `, (err) => {
+    if (err) console.error("Failed to create transactions table:", err);
+    else console.log("Transactions table ready");
+  });
+
+  // GIFTS_FLOOR
+  db.run(`
+    CREATE TABLE IF NOT EXISTS gifts_floor (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      floor REAL NOT NULL
+    )
+  `, (err) => {
+    if (err) console.error("Failed to create gifts_floor table:", err);
+    else console.log("Gifts_floor table ready");
+  });
+
+  // НЕ создаём sqlite_sequence вручную — SQLite создаст её автоматически при необходимости.
 });
 
 export default db;
