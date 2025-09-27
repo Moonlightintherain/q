@@ -3,6 +3,8 @@ import { useTonConnectUI, useTonWallet } from '@tonconnect/ui-react';
 import { config } from '../config';
 import { DebugModal } from '../components/DebugModal';
 import { useSmartLogger } from '../hooks/useSmartLogger';
+import { useTheme } from '../hooks/useTheme';
+import { Address } from '@ton/core';
 
 const API = config.apiUrl;
 
@@ -56,7 +58,18 @@ function getUserDisplayName(user) {
   return `ID ${user?.id || 'Unknown'}`;
 }
 
+function convertToUserFriendlyAddress(hash) {
+  try {
+    const address = Address.parseRaw(`0:${hash}`);
+    return address.toString();
+  } catch (error) {
+    console.error('Ошибка преобразования в юзерфрендли адрес:', error);
+    return hash;
+  }
+}
+
 export default function Profile({ userId, user, setUser }) {
+  const { isLight, isDark, theme } = useTheme();
   const [loading, setLoading] = useState(false);
   const [tonConnectUI] = useTonConnectUI();
   const wallet = useTonWallet();
@@ -453,7 +466,7 @@ export default function Profile({ userId, user, setUser }) {
               <>
                 <div className="text-sm text-gray-400 mb-2">Подключен кошелек:</div>
                 <div className="text-xs neon-text mb-4">
-                  {wallet.account.address.slice(0, 6)}...{wallet.account.address.slice(-6)}
+                  {convertToUserFriendlyAddress(wallet.account.address).slice(0, 6)}...{convertToUserFriendlyAddress(wallet.account.address).slice(-6)}
                 </div>
                 <button
                   onClick={() => tonConnectUI.disconnect()}
