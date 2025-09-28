@@ -272,29 +272,6 @@ body {
   text-shadow: 0 0 3px var(--neon-pink), 0 0 8px rgba(225, 29, 72, 0.15);
 }
 
-/* Цвета текста победителя/проигрыша - адаптивные к теме */
-.text-green-400 {
-  color: var(--neon-green);
-  text-shadow: 0 0 5px var(--neon-green), 0 0 10px var(--neon-green), 0 0 20px var(--neon-green);
-}
-
-[data-theme="light"] .text-green-400 {
-  color: #16a34a;
-  /* Override with standard green for light theme */
-  text-shadow: 0 0 3px var(--neon-green), 0 0 8px var(--neon-green);
-}
-
-.text-yellow-400 {
-  color: var(--neon-yellow);
-  text-shadow: 0 0 5px var(--neon-yellow), 0 0 10px var(--neon-yellow), 0 0 20px var(--neon-yellow);
-}
-
-[data-theme="light"] .text-yellow-400 {
-  color: #ca8a04;
-  /* Override with standard yellow for light theme */
-  text-shadow: 0 0 3px var(--neon-yellow), 0 0 8px var(--neon-yellow);
-}
-
 /* ==================== КНОПКИ ==================== */
 
 /* неоновые кнопки */
