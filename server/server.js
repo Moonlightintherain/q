@@ -1621,18 +1621,15 @@ app.post("/tonnel", async (req, res) => {
 // Эндпоинт для получения floor цен коллекций
 app.post("/api/gifts/floor", async (req, res) => {
   const { collections } = req.body;
-
   if (!collections || !Array.isArray(collections)) {
     return res.status(400).json({ error: "Collections array required" });
   }
-
   try {
     const db = await dbPool.getConnection();
     const floorPrices = {};
-
     const promises = collections.map(collection => {
       return new Promise((resolve) => {
-        // Ищем по столбцу id вместо name
+        // Ищем по столбцу id
         db.get("SELECT floor FROM gifts_floor WHERE id = ?", [collection], (err, row) => {
           if (err || !row) {
             floorPrices[collection] = '0';
@@ -1643,13 +1640,43 @@ app.post("/api/gifts/floor", async (req, res) => {
         });
       });
     });
-
     await Promise.all(promises);
     dbPool.releaseConnection(db);
-
     res.json(floorPrices);
   } catch (error) {
     console.error("Failed to get floor prices:", error);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+// Эндпоинт для получения имен коллекций
+app.post("/api/gifts/names", async (req, res) => {
+  const { collections } = req.body;
+  if (!collections || !Array.isArray(collections)) {
+    return res.status(400).json({ error: "Collections array required" });
+  }
+  try {
+    const db = await dbPool.getConnection();
+    const giftNames = {};
+    const promises = collections.map(collection => {
+      return new Promise((resolve) => {
+        // Ищем по столбцу id
+        db.get("SELECT name FROM gifts_floor WHERE id = ?", [collection], (err, row) => {
+          if (err || !row) {
+            // Если не найдено в БД, генерируем fallback имя
+            giftNames[collection] = collection.charAt(0).toUpperCase() + collection.slice(1).replace(/([A-Z])/g, ' $1');
+          } else {
+            giftNames[collection] = row.name;
+          }
+          resolve();
+        });
+      });
+    });
+    await Promise.all(promises);
+    dbPool.releaseConnection(db);
+    res.json(giftNames);
+  } catch (error) {
+    console.error("Failed to get gift names:", error);
     res.status(500).json({ error: "Database error" });
   }
 });
