@@ -14,7 +14,18 @@ function formatTon(value) {
 }
 
 function Ton({ className = "inline-block w-4 h-4 ml-1 align-middle", alt = "TON" }) {
-  return <img src="/ton_logo.svg" alt={alt} className={className} />;
+  const { isLight } = useTheme();
+
+  return (
+    <img
+      src="/ton_logo.svg"
+      alt={alt}
+      className={className}
+      style={{
+        filter: isLight ? 'brightness(0)' : 'none'
+      }}
+    />
+  );
 }
 
 function UserAvatar({ user, size = "w-6 h-6" }) {
@@ -370,10 +381,10 @@ export default function Roulette({ userId, user, setUser }) {
                   <div
                     key={`${b.userId}-${i}`}
                     className={`flex items-center justify-between py-2 px-3 rounded-lg text-sm transition-all ${isWinner
-                        ? "bg-gradient-to-r from-green-500/20 to-yellow-500/20 border border-green-500/40 shadow-lg shadow-green-500/20"
-                        : isMyBet
-                          ? "bg-gradient-to-r from-pink-500/10 to-cyan-500/10 border border-pink-500/20"
-                          : "bg-[rgba(255,255,255,0.02)] hover:bg-[rgba(255,255,255,0.05)]"
+                      ? "bg-gradient-to-r from-green-500/20 to-yellow-500/20 border border-green-500/40 shadow-lg shadow-green-500/20"
+                      : isMyBet
+                        ? "bg-gradient-to-r from-pink-500/10 to-cyan-500/10 border border-pink-500/20"
+                        : "bg-[rgba(255,255,255,0.02)] hover:bg-[rgba(255,255,255,0.05)]"
                       }`}
                   >
                     <div className="flex items-center gap-2">
@@ -417,16 +428,16 @@ export default function Roulette({ userId, user, setUser }) {
             min="0.01"
             max={user ? user.balance : undefined}
             className="input-neon w-full mb-2 text-sm sm:text-base"
-            onKeyPress={(e) => {
+            onKeyDown={(e) => {
               if (e.key === 'Enter') placeBet();
             }}
           />
           <button
             onClick={placeBet}
-            className={`neon-btn neon-btn-yellow w-full text-sm sm:text-base py-2 sm:py-3 ${(!bet || parseFloat(bet) < 0.01) && "opacity-50 cursor-not-allowed"}`}
+            className={`neon-btn neon-btn-pink w-full text-sm sm:text-base py-2 sm:py-3 ${(!bet || parseFloat(bet) < 0.01)}`}
             disabled={!bet || parseFloat(bet) < 0.01 || (user && parseFloat(bet) > user.balance)}
           >
-            Сделать ставку
+            {myCurrentBet ? "Увеличить ставку" : "Сделать ставку"}
           </button>
         </div>
       )}
