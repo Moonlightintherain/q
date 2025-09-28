@@ -3,6 +3,9 @@ import { useTonConnectUI, useTonWallet } from '@tonconnect/ui-react';
 import { config } from '../config';
 import { DebugModal } from '../components/DebugModal';
 import { useSmartLogger } from '../hooks/useSmartLogger';
+import { useTheme } from '../hooks/useTheme';
+import AddGiftModal from '../components/AddGiftModal';
+import GiftDetailModal from '../components/GiftDetailModal';
 
 const API = config.apiUrl;
 
@@ -17,7 +20,18 @@ function formatTon(value) {
 }
 
 function Ton({ className = "inline-block w-4 h-4 ml-1 align-middle", alt = "TON" }) {
-  return <img src="/ton_logo.svg" alt={alt} className={className} />;
+  const { isLight } = useTheme();
+
+  return (
+    <img
+      src="/ton_logo.svg"
+      alt={alt}
+      className={className}
+      style={{
+        filter: isLight ? 'brightness(0)' : 'none'
+      }}
+    />
+  );
 }
 
 function UserAvatar({ user, size = "w-24 h-24" }) {
@@ -56,6 +70,44 @@ function getUserDisplayName(user) {
   return `ID ${user?.id || 'Unknown'}`;
 }
 
+function GiftCard({ gift, imageUrl, floorPrice, onClick }) {
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
+
+  return (
+    <div className="flex-none">
+      <div
+        className="w-16 h-16 rounded-lg overflow-hidden bg-gray-800 border border-gray-700 cursor-pointer hover:border-gray-500 transition-colors relative"
+        onClick={onClick}
+      >
+        {/* Показать placeholder пока картинка загружается */}
+        {!imageLoaded && !imageError && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="loading-spinner w-4 h-4"></div>
+          </div>
+        )}
+
+        <img
+          src={imageUrl}
+          alt={gift}
+          className={`w-full h-full object-cover transition-opacity duration-200 ${imageLoaded ? 'opacity-100' : 'opacity-0'
+            }`}
+          onLoad={() => setImageLoaded(true)}
+          onError={(e) => {
+            setImageError(true);
+            e.target.src = '/placeholder-gift.png';
+            setImageLoaded(true);
+          }}
+        />
+      </div>
+      <div className="text-xs text-center mt-1 flex items-center justify-center">
+        <span>{formatTon(floorPrice)}</span>
+        <Ton className="w-3 h-3 ml-1" />
+      </div>
+    </div>
+  );
+}
+
 export default function Profile({ userId, user, setUser }) {
   const [loading, setLoading] = useState(false);
   const [tonConnectUI] = useTonConnectUI();
@@ -66,7 +118,12 @@ export default function Profile({ userId, user, setUser }) {
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [activeAction, setActiveAction] = useState(null); // null | "deposit" | "withdraw"
   const [gifts, setGifts] = useState([]);
-const [giftsFloorPrices, setGiftsFloorPrices] = useState({});
+  const [giftsFloorPrices, setGiftsFloorPrices] = useState({});
+  const [showAddGiftModal, setShowAddGiftModal] = useState(false);
+  const [selectedGift, setSelectedGift] = useState(null);
+  const [showGiftDetailModal, setShowGiftDetailModal] = useState(false);
+  const [giftsLoading, setGiftsLoading] = useState(false);
+  const [giftsNames, setGiftsNames] = useState({});
 
   // Smart logger (автоматически включается/отключается через config)
   const { debugData, logInfo, logSuccess, logError, logWarning, showDebug, closeDebug, clearLogs } = useSmartLogger();
@@ -354,45 +411,75 @@ const [giftsFloorPrices, setGiftsFloorPrices] = useState({});
       .finally(() => setLoading(false));
   };
 
-const loadUserGifts = async (userId) => {
-  try {
-    // Получаем подарки пользователя
-    const userResponse = await fetch(`${API}/api/user/${userId}/gifts`);
-    if (!userResponse.ok) return;
-    
-    const userData = await userResponse.json();
-    const userGifts = userData.gifts || [];
-    
-    if (userGifts.length === 0) {
-      setGifts([]);
-      return;
-    }
-    
-    // Получаем floor цены для коллекций
-    const collections = [...new Set(userGifts.map(gift => gift.split('-')[0]))];
-    const floorResponse = await fetch(`${API}/api/gifts/floor`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ collections })
-    });
-    
-    if (floorResponse.ok) {
-      const floorData = await floorResponse.json();
-      setGiftsFloorPrices(floorData);
-    }
-    
-    setGifts(userGifts);
-  } catch (error) {
-    console.error('Failed to load gifts:', error);
-  }
-};
+  const loadUserGifts = async (userId) => {
+    if (!userId) return;
+    setGiftsLoading(true);
 
-useEffect(() => {
-  if (userId) {
-    loadUser(userId);
-    loadUserGifts(userId);
-  }
-}, [userId]);
+    try {
+      // Получаем подарки пользователя
+      const userResponse = await fetch(`${API}/api/user/${userId}/gifts`);
+      if (!userResponse.ok) {
+        setGifts([]);
+        return;
+      }
+
+      const userData = await userResponse.json();
+      const userGifts = userData.gifts || [];
+
+      // Сразу устанавливаем подарки
+      setGifts(userGifts);
+
+      if (userGifts.length === 0) {
+        return;
+      }
+
+      // Получаем уникальные коллекции
+      const collections = [...new Set(userGifts.map(gift => gift.split('-')[0]))];
+
+      // Параллельно запрашиваем floor цены и имена
+      const [floorResponse, namesResponse] = await Promise.all([
+        fetch(`${API}/api/gifts/floor`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ collections })
+        }),
+        fetch(`${API}/api/gifts/names`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ collections })
+        })
+      ]);
+
+      if (floorResponse.ok) {
+        const floorData = await floorResponse.json();
+        setGiftsFloorPrices(floorData);
+      }
+
+      if (namesResponse.ok) {
+        const namesData = await namesResponse.json();
+        setGiftsNames(namesData);
+      }
+
+    } catch (error) {
+      console.error('Failed to load gifts:', error);
+      setGifts([]);
+    } finally {
+      setGiftsLoading(false);
+    }
+  };
+
+  // ДОБАВИТЬ ФУНКЦИЮ получения имени подарка
+  const getGiftName = (giftId) => {
+    const collection = giftId.split('-')[0];
+    return giftsNames[collection] || collection.charAt(0).toUpperCase() + collection.slice(1).replace(/([A-Z])/g, ' $1');
+  };
+
+  useEffect(() => {
+    if (userId) {
+      loadUser(userId);
+      loadUserGifts(userId);
+    }
+  }, [userId]);
 
   const handleRefresh = () => {
     if (!userId) return;
@@ -476,43 +563,45 @@ useEffect(() => {
         </div>
       </div>
 
-{/* Мои подарки */}
       <div className="flex-none mb-8">
         <div className="glass-card p-6">
           <div className="text-sm text-gray-400 mb-4">Мои подарки:</div>
           <div className="flex overflow-x-auto gap-3 pb-2">
-            {gifts.map((gift, index) => {
-              const collection = gift.split('-')[0];
-              const floorPrice = giftsFloorPrices[collection] || '0';
-              const imageUrl = `https://nft.fragment.com/gift/${gift}.small.jpg`;
-              
-              return (
-                <div key={index} className="flex-none">
-                  <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-800 border border-gray-700">
-                    <img
-                      src={imageUrl}
-                      alt={gift}
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        e.target.src = '/placeholder-gift.png'; // fallback изображение
-                      }}
-                    />
-                  </div>
-                  <div className="text-xs text-center mt-1 flex items-center justify-center">
-                    <span>{formatTon(floorPrice)}</span>
-                    <Ton className="w-3 h-3 ml-1" />
-                  </div>
+            {/* Показать loading при первоначальной загрузке */}
+            {giftsLoading && gifts.length === 0 ? (
+              <div className="flex-none">
+                <div className="w-16 h-16 rounded-lg bg-gray-800 border border-gray-700 flex items-center justify-center">
+                  <div className="loading-spinner w-6 h-6"></div>
                 </div>
-              );
-            })}
-            
+                <div className="text-xs text-center mt-1 text-gray-500">
+                  Загрузка...
+                </div>
+              </div>
+            ) : (
+              gifts.map((gift, index) => {
+                const collection = gift.split('-')[0];
+                const floorPrice = giftsFloorPrices[collection] || '0';
+                const imageUrl = `https://nft.fragment.com/gift/${gift}.small.jpg`;
+
+                return (
+                  <GiftCard
+                    key={index}
+                    gift={gift}
+                    imageUrl={imageUrl}
+                    floorPrice={floorPrice}
+                    onClick={() => {
+                      setSelectedGift(gift);
+                      setShowGiftDetailModal(true);
+                    }}
+                  />
+                );
+              })
+            )}
+
             {/* Кнопка добавления */}
             <div className="flex-none">
               <button
-                onClick={() => {
-                  // TODO: открыть компонент для добавления подарков
-                  console.log('Open gifts selection');
-                }}
+                onClick={() => setShowAddGiftModal(true)}
                 className="w-16 h-16 rounded-lg bg-gray-800 border border-gray-700 border-dashed flex items-center justify-center text-gray-400 hover:text-white hover:border-gray-500 transition-colors"
               >
                 <span className="text-2xl">+</span>
@@ -654,6 +743,23 @@ useEffect(() => {
           error={debugData.error}
         />
       )}
+      {/* Модальные окна */}
+      <AddGiftModal
+        isOpen={showAddGiftModal}
+        onClose={() => setShowAddGiftModal(false)}
+      />
+
+      <GiftDetailModal
+        isOpen={showGiftDetailModal}
+        onClose={() => {
+          setShowGiftDetailModal(false);
+          setSelectedGift(null);
+        }}
+        gift={selectedGift}
+        giftName={selectedGift ? getGiftName(selectedGift) : ''}
+        floorPrice={selectedGift && selectedGift.includes('-') ? giftsFloorPrices[selectedGift.split('-')[0]] || '0' : '0'}
+        formatTon={formatTon}
+      />
     </div>
   );
 }
