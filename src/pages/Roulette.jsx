@@ -339,7 +339,11 @@ export default function Roulette({ userId, user, setUser }) {
           {/* Указатель */}
           <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1 z-20">
             <svg width="30" height="30" viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M15 30 L5 10 L25 10 Z" fill="#fff" filter="drop-shadow(0 0 5px rgba(255,255,255,0.8))" />
+              <path
+                d="M15 30 L5 10 L25 10 Z"
+                fill={isLight ? "#1e293b" : "#fff"}
+                filter={`drop-shadow(0 0 5px ${isLight ? "#00e5ff" : "rgba(255,255,255,0.8)"})`}
+              />
             </svg>
           </div>
 
@@ -351,8 +355,9 @@ export default function Roulette({ userId, user, setUser }) {
                 <p className="text-sm sm:text-base neon-text">игроков</p>
               </div>
             ) : status === "running" ? (
-              <div className="text-center">
-                <p className="text-2xl sm:text-3xl neon-text">Крутим!</p>
+              <div className="text-center flex items-center justify-center">
+                <span className="text-2xl sm:text-3xl neon-text font-bold">{formatTon(totalBet)}</span>
+                <Ton className="w-5 h-5 ml-1" />
               </div>
             ) : (
               <div className="text-center flex items-center justify-center">
