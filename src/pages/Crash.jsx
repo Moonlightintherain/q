@@ -330,7 +330,7 @@ export default function Crash({ userId, user, setUser }) {
     centerDisplay = `${Number(multiplier).toFixed(2)}x`;
     centerColor = "text-red-500";
   } else {
-    centerDisplay = "Ожидание";
+    centerDisplay = "...";
     centerColor = "neon-text";
   }
 
