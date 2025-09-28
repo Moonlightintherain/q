@@ -14,7 +14,18 @@ function formatTon(value) {
 }
 
 function Ton({ className = "inline-block w-4 h-4 ml-1 align-middle", alt = "TON" }) {
-  return <img src="/ton_logo.svg" alt={alt} className={className} />;
+  const { isLight } = useTheme();
+
+  return (
+    <img
+      src="/ton_logo.svg"
+      alt={alt}
+      className={className}
+      style={{
+        filter: isLight ? 'brightness(0)' : 'none'
+      }}
+    />
+  );
 }
 
 function UserAvatar({ user, size = "w-8 h-8" }) {
@@ -425,6 +436,9 @@ export default function Crash({ userId, user, setUser }) {
                 min="0.01"
                 max={user ? user.balance : undefined}
                 className="input-neon w-full pr-8"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') placeBet(parseFloat(bet));
+                }}
               />
               {bet && (
                 <button
