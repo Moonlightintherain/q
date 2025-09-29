@@ -1,3 +1,6 @@
+// how to run:
+// node db.js
+
 import sqlite3pkg from "sqlite3";
 const sqlite3 = sqlite3pkg.verbose();
 import path from "path";
@@ -23,7 +26,7 @@ db.serialize(() => {
     )
   `, (err) => {
     if (err) console.error("Failed to create users table:", err);
-    else console.log("Users table ready");
+    else console.log("users table ready");
   });
 
   // TRANSACTIONS (AUTOINCREMENT -> sqlite_sequence создастся автоматически)
@@ -43,19 +46,19 @@ db.serialize(() => {
     )
   `, (err) => {
     if (err) console.error("Failed to create transactions table:", err);
-    else console.log("Transactions table ready");
+    else console.log("transactions table ready");
   });
 
-  // GIFTS_FLOOR
+  // GIFT_COLLECTIONS
   db.run(`
-    CREATE TABLE IF NOT EXISTS gifts_floor (
+    CREATE TABLE IF NOT EXISTS gift_collections (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       floor REAL NOT NULL
     )
   `, (err) => {
-    if (err) console.error("Failed to create gifts_floor table:", err);
-    else console.log("Gifts_floor table ready");
+    if (err) console.error("Failed to create gift_collections table:", err);
+    else console.log("gift_collections table ready");
   });
 
   // НЕ создаём sqlite_sequence вручную — SQLite создаст её автоматически при необходимости.
