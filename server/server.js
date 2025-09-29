@@ -9,6 +9,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { tonService } from "./ton-service.js";
 import { telegramBot } from "./telegram-bot.js";
+import fs from "fs/promises";
 
 // Добавляем защиту и санитизацию
 function sanitizeInput(input) {
@@ -244,6 +245,7 @@ let roundNumber = 0;
 let nextStreakTrigger = Math.floor(Math.random() * 101) + 100;
 let inStreak = false;
 let streakRoundsLeft = 0;
+let cashoutLocks = {};
 
 let rouletteClients = [];
 let currentRouletteRound = null;
@@ -887,15 +889,26 @@ app.post("/api/crash/cashout", (req, res) => {
   const { userId, multiplier } = req.body;
   if (!currentCrashRound || currentCrashRound.status !== "running") return res.status(400).json({ error: "Раунд не активен" });
   if (!crashBets[userId] || crashBets[userId].status !== "ongoing") return res.status(400).json({ error: "Нет активной ставки" });
+  if (cashoutLocks[userId]) return res.status(400).json({ error: "Запрос уже обрабатывается" });
+
+  cashoutLocks[userId] = true;  // Устанавливаем блокировку сразу после проверок
 
   const win = +(crashBets[userId].amount * multiplier).toFixed(2);
   db.run("UPDATE users SET balance = balance - ? WHERE id = 0", [win], function (err) {
-    if (err) return res.status(500).json({ error: "DB error" });
+    if (err) {
+      cashoutLocks[userId] = false;  // Снимаем блокировку при ошибке
+      return res.status(500).json({ error: "DB error" });
+    }
     db.run("UPDATE users SET balance = balance + ? WHERE id = ?", [win, userId], function (err2) {
-      if (err2) return res.status(500).json({ error: "DB error" });
+      if (err2) {
+        cashoutLocks[userId] = false;  // Снимаем блокировку при ошибке
+        return res.status(500).json({ error: "DB error" });
+      }
       crashBets[userId].status = "cashed";
       crashBets[userId].win = win;
+      crashBets[userId].cashoutMultiplier = multiplier;  // Сохраняем множитель для лога раунда
       broadcastToCrash({ type: "cashout", userId: Number(userId), win, bets: Object.values(crashBets) });
+      cashoutLocks[userId] = false;  // Снимаем блокировку после успешной обработки
       return res.json({ success: true, win });
     });
   });
@@ -1107,11 +1120,17 @@ function generateCrashRound(immediateCrashDivisor, houseEdge) {
     return 1.0;
   }
 
-  const r = Math.random();
+  /*const r = Math.random();
   let crashPoint = 1.0 / (1.0 - r);
   crashPoint *= (1 - houseEdge);
   crashPoint = Math.min(crashPoint, 100);
-  return Math.max(1.0, +crashPoint.toFixed(2));
+  return Math.max(1.0, +crashPoint.toFixed(2)); */
+
+  const x = Math.floor(Math.random() * 1000000);
+  let crashPoint = (1000000 / (x + 1)) * (1 - houseEdge);
+  crashPoint = Math.max(1.0, Math.min(100.0, crashPoint));
+  return +crashPoint.toFixed(2);
+
 }
 
 function startCrashLoop() {
@@ -1123,7 +1142,7 @@ function startCrashLoop() {
       streakRoundsLeft = 10;
       nextStreakTrigger = roundNumber + Math.floor(Math.random() * 101) + 100;
     }
-    currentCrashRound = { status: "betting", countdown: 10 };
+    currentCrashRound = { status: "betting", countdown: 5 };
 
     const enrichBetsAndBroadcast = () => {
       Promise.all(Object.values(crashBets).map(bet =>
@@ -1142,7 +1161,7 @@ function startCrashLoop() {
         broadcastToCrash({
           type: "status",
           status: "betting",
-          countdown: 10,
+          countdown: 5,
           bets: enrichedBets,
           history: crashHistory
         });
@@ -1151,7 +1170,7 @@ function startCrashLoop() {
 
     enrichBetsAndBroadcast();
 
-    let countdown = 10;
+    let countdown = 5;
     const countdownInterval = setInterval(() => {
       countdown--;
       currentCrashRound.countdown = countdown;
@@ -1233,6 +1252,23 @@ function startCrashLoop() {
             crashHistory = crashHistory.slice(0, 100);
           }
 
+          // Логируем раунд в файл только если были игроки
+          if (Object.values(crashBets).length > 0) {
+            const endTime = new Date().toISOString();
+            const roundLog = {
+              timestamp: endTime,
+              roundNumber,
+              bets: Object.values(crashBets).map(b => ({
+                userId: b.userId,
+                amount: b.amount,
+                multiplier: b.cashoutMultiplier || 0  // 0 для lost/crashed, реальный для cashed
+              }))
+            };
+            fs.appendFile('./crash_logs.jsonl', JSON.stringify(roundLog) + '\n').catch(err => {
+              console.error('Failed to log crash round:', err);
+            });
+          }
+
           Promise.all(Object.values(crashBets).map(bet =>
             new Promise(resolve => {
               db.get("SELECT username, first_name, last_name, photo_url FROM users WHERE id = ?", [bet.userId], (err, user) => {
@@ -1257,7 +1293,7 @@ function startCrashLoop() {
           setTimeout(runRound, 5000);
         }
       }, 500);
-    }, 10000);
+    }, 5000);
   };
   runRound();
 }
