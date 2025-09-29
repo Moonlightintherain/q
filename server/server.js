@@ -201,14 +201,14 @@ db.serialize(() => {
 
   // Создаем таблицу для floor цен подарков
   db.run(`
-    CREATE TABLE IF NOT EXISTS gifts_floor (
+    CREATE TABLE IF NOT EXISTS gift_collections (
       id TEXT PRIMARY KEY,
       name TEXT,
       floor REAL NOT NULL
     )
   `, (err) => {
     if (err) {
-      console.error("Failed to create gifts_floor table:", err);
+      console.error("Failed to create gift_collections table:", err);
       return;
     }
     console.log("Gifts floor table ready");
@@ -1629,7 +1629,7 @@ app.post("/tonnel", async (req, res) => {
         const id = item.name.replace(/[^a-zA-Z]/g, "").toLowerCase();
 
         db.run(`
-          INSERT OR REPLACE INTO gifts_floor (id, name, floor) 
+          INSERT OR REPLACE INTO gift_collections (id, name, floor) 
           VALUES (?, ?, ?)
         `, [id, item.name, floor], (err) => {
           if (err) {
@@ -1666,7 +1666,7 @@ app.post("/api/gifts/floor", async (req, res) => {
     const promises = collections.map(collection => {
       return new Promise((resolve) => {
         // Ищем по столбцу id
-        db.get("SELECT floor FROM gifts_floor WHERE id = ?", [collection], (err, row) => {
+        db.get("SELECT floor FROM gift_collections WHERE id = ?", [collection], (err, row) => {
           if (err || !row) {
             floorPrices[collection] = '0';
           } else {
@@ -1697,7 +1697,7 @@ app.post("/api/gifts/names", async (req, res) => {
     const promises = collections.map(collection => {
       return new Promise((resolve) => {
         // Ищем по столбцу id
-        db.get("SELECT name FROM gifts_floor WHERE id = ?", [collection], (err, row) => {
+        db.get("SELECT name FROM gift_collections WHERE id = ?", [collection], (err, row) => {
           if (err || !row) {
             // Если не найдено в БД, генерируем fallback имя
             giftNames[collection] = collection.charAt(0).toUpperCase() + collection.slice(1).replace(/([A-Z])/g, ' $1');
