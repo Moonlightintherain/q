@@ -161,6 +161,17 @@ class TelegramBot {
     return await this.sendMessage(userId, message);
   }
 
+  async sendGiftDepositNotification(userId, title, slug) {
+    const message = `
+🎁 Подарок зачислен!
+📦 Название: ${title}
+🔗 Ссылка: t.me/nft/${slug}
+`.trim();
+    return await this.sendMessage(userId, message, {
+      disable_web_page_preview: false
+    });
+  }
+
   convertToUserFriendlyAddress(hash) {
     try {
       const address = Address.parseRaw(`0:${hash}`);
