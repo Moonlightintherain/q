@@ -61,7 +61,28 @@ db.serialize(() => {
     else console.log("gift_collections table ready");
   });
 
-  // НЕ создаём sqlite_sequence вручную — SQLite создаст её автоматически при необходимости.
+  db.run(
+    `CREATE TABLE IF NOT EXISTS gifts (
+      slug TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      gift_unique_id TEXT NOT NULL,
+      gift_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      num INTEGER NOT NULL,
+      model TEXT,
+      model_rarity_permille INTEGER,
+      pattern TEXT,
+      pattern_rarity_permille INTEGER,
+      backdrop TEXT,
+      backdrop_rarity_permille INTEGER,
+      owner_id TEXT NOT NULL,
+      resell_amount TEXT,
+      can_export_at INTEGER,
+      transfer_stars INTEGER)
+    `, (err) => {
+      if (err) console.error("Failed to create gifts table:", err);
+      else console.log("gifts table ready");
+  });
 });
 
 export default db;
