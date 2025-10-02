@@ -196,7 +196,7 @@ db.serialize(() => {
       console.error("Failed to create users table:", err);
       return;
     }
-    console.log("Users table ready");
+    console.log("users table ready");
   });
 
   // Создаем таблицу для floor цен подарков
@@ -211,7 +211,34 @@ db.serialize(() => {
       console.error("Failed to create gift_collections table:", err);
       return;
     }
-    console.log("Gifts floor table ready");
+    console.log("gift_collections table ready");
+  });
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS gifts (
+      slug TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      gift_unique_id TEXT NOT NULL,
+      gift_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      num INTEGER NOT NULL,
+      model TEXT,
+      model_rarity_permille INTEGER,
+      pattern TEXT,
+      pattern_rarity_permille INTEGER,
+      backdrop TEXT,
+      backdrop_rarity_permille INTEGER,
+      owner_id TEXT NOT NULL,
+      resell_amount TEXT,
+      can_export_at INTEGER,
+      transfer_stars INTEGER
+    )
+  `, (err) => {
+    if (err) {
+      console.error("Failed to create gifts table:", err);
+      return;
+    }
+    console.log("gifts table ready");
   });
 
   // Add columns to existing table if they don't exist
@@ -493,28 +520,61 @@ function endRouletteBetting() {
 function finishRouletteRound(totalDegrees) {
   const betsArray = Object.values(rouletteBets).slice().sort((a, b) => b.amount - a.amount);
   const totalBet = betsArray.reduce((sum, b) => sum + b.amount, 0);
-
+  
   // Используем заранее рассчитанного победителя
   const winner = currentRouletteRound.preCalculatedWinner;
-
+  
   if (winner) {
-    const winAmount = totalBet;
+    // Получаем процент комиссии из .env (по умолчанию 1%)
+    const commissionPercent = parseFloat(process.env.ROULETTE_COMMISSION || '0.01');
+    const commissionAmount = totalBet * commissionPercent;
+    const winAmount = totalBet - commissionAmount;
+    
     currentRouletteRound.winner = {
       userId: winner.userId,
       amount: winner.amount,
       winAmount: winAmount,
       percent: ((winner.amount / totalBet) * 100).toFixed(2),
     };
-
-    db.run("UPDATE users SET balance = balance - ? WHERE id = 0", [winAmount], (err) => {
-      if (err) console.error("DB error adding to casino:", err.message);
-      db.run("UPDATE users SET balance = balance + ? WHERE id = ?", [winAmount, winner.userId], (err2) => {
-        if (err2) console.error("DB error adding to winner:", err2.message);
-        broadcastToRoulette({ type: "winner", winner: currentRouletteRound.winner, winningDegrees: totalDegrees });
-
-        setTimeout(() => {
-          resetRouletteRound();
-        }, 3000);
+    
+    // Списываем весь банк из пула ставок (ID 1)
+    db.run("UPDATE users SET balance = balance - ? WHERE id = 1", [totalBet], (err) => {
+      if (err) console.error("DB error subtracting from roulette pool:", err.message);
+      
+      // Добавляем комиссию казино рулетки (ID 2)
+      db.run("UPDATE users SET balance = balance + ? WHERE id = 2", [commissionAmount], (errCommission) => {
+        if (errCommission) console.error("DB error adding commission to casino:", errCommission.message);
+        
+        // Добавляем выигрыш победителю
+        db.run("UPDATE users SET balance = balance + ? WHERE id = ?", [winAmount, winner.userId], (err2) => {
+          if (err2) console.error("DB error adding to winner:", err2.message);
+          
+          console.log(`💰 Roulette round finished: Total ${totalBet} TON, Commission ${commissionAmount} TON (${(commissionPercent * 100).toFixed(2)}%), Winner gets ${winAmount} TON`);
+          
+          // Логируем раунд в файл только если были игроки
+          if (betsArray.length > 0) {
+            const endTime = new Date().toISOString();
+            const roundLog = {
+              timestamp: endTime,
+              bets: betsArray.map(b => ({
+                userId: b.userId,
+                amount: b.amount
+              })),
+              winner: winner.userId,
+              commission: commissionPercent
+            };
+            
+            fs.appendFile('./roulette_logs.jsonl', JSON.stringify(roundLog) + '\n').catch(err => {
+              console.error('Failed to log roulette round:', err);
+            });
+          }
+          
+          broadcastToRoulette({ type: "winner", winner: currentRouletteRound.winner, winningDegrees: totalDegrees });
+          
+          setTimeout(() => {
+            resetRouletteRound();
+          }, 3000);
+        });
       });
     });
   } else {
@@ -944,7 +1004,7 @@ app.post("/api/roulette/bet", (req, res) => {
       if (err2) {
         return res.status(500).json({ error: "Ошибка при списании средств" });
       }
-      db.run("UPDATE users SET balance = balance + ? WHERE id = 0", [betAmount], function () {
+      db.run("UPDATE users SET balance = balance + ? WHERE id = 1", [betAmount], function () {
 
         db.get("SELECT username, first_name, last_name, photo_url FROM users WHERE id = ?", [userId], (err, userData) => {
           if (!rouletteBets[userId]) {
@@ -1008,7 +1068,7 @@ app.post("/api/roulette/bet", (req, res) => {
               if (Object.keys(rouletteBets).length === 1) {
                 const loneBet = rouletteBets[userId];
                 db.run("UPDATE users SET balance = balance + ? WHERE id = ?", [loneBet.amount, loneBet.userId], (err) => {
-                  db.run("UPDATE users SET balance = balance - ? WHERE id = 0", [loneBet.amount], () => {
+                  db.run("UPDATE users SET balance = balance - ? WHERE id = 1", [loneBet.amount], () => {
                     broadcastToRoulette({
                       type: "status",
                       status: "waiting",
@@ -1713,6 +1773,39 @@ app.post("/api/gifts/names", async (req, res) => {
     res.json(giftNames);
   } catch (error) {
     console.error("Failed to get gift names:", error);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.post("/api/gifts/dep", async (req, res) => {
+  const data = req.body;
+  const lowerSlug = data.slug.toLowerCase();
+  try {
+    const db = await dbPool.getConnection();
+    await new Promise((resolve, reject) => {
+      db.run(`
+        INSERT OR REPLACE INTO gifts(slug, user_id, gift_unique_id, gift_id, title, num, model, model_rarity_permille, pattern, pattern_rarity_permille, backdrop, backdrop_rarity_permille, owner_id, resell_amount, can_export_at, transfer_stars)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [lowerSlug, data.user_id, data.id, data.gift_id, data.title, data.num,
+        data.model, data.model_rarity_permille, data.pattern, data.pattern_rarity_permille,
+        data.backdrop, data.backdrop_rarity_permille, data.owner_id, JSON.stringify(data.resell_amount),
+        data.can_export_at, data.transfer_stars
+      ], (err) => {
+        if (err) {
+          console.error("Failed to insert gift:", err);
+          reject(err);
+        } else {
+          console.log(`✅ Gift inserted: ${lowerSlug} for user ${data.user_id}`);
+          resolve();
+        }
+      });
+    });
+    dbPool.releaseConnection(db);
+    // Send notification
+    await telegramBot.sendGiftDepositNotification(data.user_id, data.title, lowerSlug);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("❌ Failed to process gift deposit:", error);
     res.status(500).json({ error: "Database error" });
   }
 });
