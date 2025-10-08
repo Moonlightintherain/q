@@ -64,7 +64,7 @@ db.serialize(() => {
   db.run(
     `CREATE TABLE IF NOT EXISTS gifts (
       slug TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
+      user_id INTEGER NOT NULL,
       gift_unique_id TEXT NOT NULL,
       gift_id TEXT NOT NULL,
       title TEXT NOT NULL,
@@ -75,7 +75,7 @@ db.serialize(() => {
       pattern_rarity_permille INTEGER,
       backdrop TEXT,
       backdrop_rarity_permille INTEGER,
-      owner_id TEXT NOT NULL,
+      owner_id INTEGER NOT NULL,
       resell_amount TEXT,
       can_export_at INTEGER,
       transfer_stars INTEGER)
