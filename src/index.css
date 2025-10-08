@@ -24,6 +24,16 @@
   --text-secondary: #ffffff;
   --text-muted: #64748b;
   --text-accent: #ff2d95;
+  
+  /* Gift button colors */
+  --gift-btn-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(5, 0, 20, 0.06) 100%);
+  --gift-btn-border: rgba(255, 255, 255, 0.06);
+  --gift-btn-hover-border: rgba(0, 229, 255, 0.3);
+  
+  /* Checkmark animation colors */
+  --checkmark-color: #39ff14;
+  --checkmark-bg: rgba(57, 255, 20, 0.1);
+  --checkmark-border: rgba(57, 255, 20, 0.3);
 }
 
 /* Light theme */
@@ -34,7 +44,7 @@
   --neon-yellow: #f59e0b;
   --bg-circle-color: #fef7ff;
 
-  /* Beautiful gradient light theme colors */
+  /* Light theme colors */
   --bg-primary: linear-gradient(135deg, #fef7ff 0%, #f0f9ff 50%, #f0fdf4 100%);
   --bg-secondary: linear-gradient(135deg, #fce7f3 0%, #dbeafe 50%, #dcfce7 100%);
   --bg-card: rgba(255, 255, 255, 0.8);
@@ -43,6 +53,16 @@
   --text-secondary: #334155;
   --text-muted: #64748b;
   --text-accent: #ec4899;
+  
+  /* Gift button colors for light theme */
+  --gift-btn-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.8) 0%, rgba(254, 247, 255, 0.6) 100%);
+  --gift-btn-border: rgba(30, 41, 59, 0.1);
+  --gift-btn-hover-border: rgba(236, 72, 153, 0.3);
+  
+  /* Checkmark animation colors for light theme */
+  --checkmark-color: #10b981;
+  --checkmark-bg: rgba(16, 185, 129, 0.1);
+  --checkmark-border: rgba(16, 185, 129, 0.3);
 }
 
 /* ==================== ГЛОБАЛЬНЫЕ СТИЛИ И СБРОС ==================== */
@@ -131,6 +151,48 @@ body {
   }
 }
 
+/* Circular countdown animation for gift selection */
+@keyframes circularCountdown {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: 157; /* 2 * π * 25 (radius) */
+  }
+}
+
+/* Fade in and slide down animation for new bets */
+@keyframes fadeInSlideDown {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Pulse animation for bet updates */
+@keyframes betPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(0, 229, 255, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(0, 229, 255, 0);
+  }
+}
+
+/* Scroll indicator pulse */
+@keyframes scrollIndicatorPulse {
+  0%, 100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 /* ==================== ФОНОВЫЕ ЭЛЕМЕНТЫ И ЭФФЕКТЫ ==================== */
 
 .bg-shift {
@@ -201,7 +263,7 @@ body {
 
 /* ==================== СТЕКЛЯННЫЕ ПАНЕЛИ И КАРТОЧКИ ==================== */
 
-/* стеклянные панели */
+/* glass cards */
 .glass-card {
   background: linear-gradient(135deg,
       rgba(255, 255, 255, 0.03) 0%,
@@ -215,6 +277,14 @@ body {
     0 8px 32px rgba(57, 255, 20, 0.1),
     0 2px 16px rgba(0, 229, 255, 0.05),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  /* GPU acceleration fixes */
+  will-change: transform;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  -webkit-perspective: 1000;
+  perspective: 1000;
 }
 
 /* Light theme glass cards */
@@ -291,6 +361,10 @@ body {
   justify-content: center;
   cursor: pointer;
   font-weight: bold;
+  /* GPU acceleration fixes */
+  will-change: transform;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
 }
 
 [data-theme="light"] .neon-btn {
@@ -391,10 +465,39 @@ body {
   box-shadow: 0 0 8px var(--neon-yellow), 0 0 15px var(--neon-yellow), 0 0 20px var(--neon-yellow);
 }
 
-/* Better focus states for light theme */
-[data-theme="light"] .neon-btn:focus {
-  outline: 2px solid var(--neon-cyan);
-  outline-offset: 2px;
+/* Gift button styles */
+.gift-btn {
+  @apply rounded-xl font-semibold tracking-wide transition-all cursor-pointer;
+  background: var(--gift-btn-bg);
+  border: 2px solid var(--gift-btn-border);
+  box-shadow:
+    0 4px 15px rgba(0, 0, 0, 0.3),
+    inset 0 1px 3px rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  /* GPU acceleration fixes */
+  will-change: transform;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+}
+
+.gift-btn:hover {
+  border-color: var(--gift-btn-hover-border);
+  transform: translateZ(0) scale(1.05);
+  box-shadow:
+    0 6px 20px rgba(0, 229, 255, 0.2),
+    inset 0 1px 3px rgba(255, 255, 255, 0.1);
+}
+
+.gift-btn:active {
+  box-shadow: 0 0 15px var(--neon-cyan), 0 0 25px var(--neon-cyan);
+  transform: translateZ(0) scale(0.98);
+}
+
+[data-theme="light"] .gift-btn:active {
+  box-shadow: 0 0 8px var(--neon-cyan), 0 0 15px var(--neon-cyan);
 }
 
 /* ==================== ПОЛЯ ВВОДА ==================== */
@@ -491,6 +594,7 @@ body {
   max-height: 30vh;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  will-change: scroll-position;
 }
 
 /* Light theme bet list */
@@ -508,6 +612,7 @@ body {
   max-height: 20vh;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  will-change: scroll-position;
 }
 
 /* Scrollable page containers */
@@ -544,6 +649,111 @@ body {
 [data-theme="light"] .bg-overlay::-webkit-scrollbar-thumb {
   background: var(--text-muted);
   border-radius: 3px;
+}
+
+/* Bet card color strip */
+.bet-card-strip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 8px 0 0 8px;
+  transition: width 0.2s ease;
+}
+
+.bet-card:hover .bet-card-strip {
+  width: 6px;
+}
+
+/* Bet card animations */
+.bet-card-new {
+  animation: fadeInSlideDown 0.4s ease-out;
+}
+
+.bet-card-updated {
+  animation: betPulse 0.6s ease-out;
+}
+
+.bet-card {
+  position: relative;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.bet-card:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 8px 24px rgba(0, 229, 255, 0.15);
+}
+
+[data-theme="light"] .bet-card:hover {
+  box-shadow: 0 8px 24px rgba(236, 72, 153, 0.15);
+}
+
+/* Scroll indicator for carousel */
+.carousel-scroll-indicator {
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  z-index: 10;
+}
+
+.carousel-scroll-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(0, 229, 255, 0.3);
+  transition: background 0.3s ease;
+  animation: scrollIndicatorPulse 2s ease-in-out infinite;
+}
+
+.carousel-scroll-dot.active {
+  background: rgba(0, 229, 255, 0.8);
+  animation: none;
+}
+
+[data-theme="light"] .carousel-scroll-dot {
+  background: rgba(236, 72, 153, 0.3);
+}
+
+[data-theme="light"] .carousel-scroll-dot.active {
+  background: rgba(236, 72, 153, 0.8);
+}
+
+/* Carousel edge gradients for scroll hint */
+.carousel-container {
+  position: relative;
+}
+
+.carousel-edge-left,
+.carousel-edge-right {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 20px;
+  pointer-events: none;
+  z-index: 5;
+  transition: opacity 0.3s ease;
+}
+
+.carousel-edge-left {
+  left: 0;
+  background: linear-gradient(to right, rgba(0, 0, 0, 0.3), transparent);
+}
+
+.carousel-edge-right {
+  right: 0;
+  background: linear-gradient(to left, rgba(0, 0, 0, 0.3), transparent);
+}
+
+[data-theme="light"] .carousel-edge-left {
+  background: linear-gradient(to right, rgba(255, 255, 255, 0.6), transparent);
+}
+
+[data-theme="light"] .carousel-edge-right {
+  background: linear-gradient(to left, rgba(255, 255, 255, 0.6), transparent);
 }
 
 /* ==================== РУЛЕТКА И ИГРОВЫЕ ЭЛЕМЕНТЫ ==================== */
@@ -589,11 +799,9 @@ body {
 
 /* Добавляем неоновый эффект для своей доли на колесе */
 .my-slice-neon {
-  /* Эффект внутренней тени теперь реализуется через SVG-фильтр */
   filter: url(#inner-neon-glow);
 }
 
-/* Дополнительные стили для светлой темы */
 [data-theme="light"] .my-slice-neon {
   filter: url(#inner-light-glow);
 }
@@ -611,9 +819,19 @@ body {
   user-select: none;
 }
 
+/* Анимация плавного появления сектора */
+.bet-sector {
+  opacity: 0;
+  transition: opacity 0.3s ease-out;
+}
+
+.bet-sector.visible {
+  opacity: 1;
+}
+
 /* ==================== ТАЙМЕР И СОСТОЯНИЯ ==================== */
 
-/* Стили для таймера обратного отсчета - адаптивные к теме */
+/* Стили для таймера обратного отсчета */
 .countdown-timer {
   color: var(--neon-yellow);
   text-shadow: 0 0 10px var(--neon-yellow);
@@ -633,7 +851,6 @@ body {
   animation: spin 1s linear infinite;
 }
 
-/* Improved loading spinner for light theme */
 [data-theme="light"] .loading-spinner {
   border-color: var(--bg-card-border);
   border-top-color: var(--neon-cyan);
@@ -660,7 +877,7 @@ body {
   line-height: 1.2;
 }
 
-/* multiplier big - увеличенный размер */
+/* multiplier big */
 .multiplier {
   font-size: 5rem;
   font-weight: 900;
@@ -678,6 +895,48 @@ body {
   fill: var(--bg-circle-color);
 }
 
+/* Checkmark container with circular countdown */
+.checkmark-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.checkmark-circle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-90deg);
+  width: 80%;
+  height: 80%;
+}
+
+.checkmark-circle circle {
+  fill: none;
+  stroke: var(--checkmark-color);
+  stroke-width: 3;
+  stroke-dasharray: 157;
+  stroke-dashoffset: 0;
+  animation: circularCountdown 3s linear forwards;
+}
+
+.checkmark-icon {
+  position: relative;
+  color: var(--checkmark-color);
+  font-size: 1.5rem;
+  z-index: 1;
+}
+
+/* Text ellipsis for long names */
+.text-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ==================== ПЕРЕХОДЫ И АНИМАЦИИ ТЕМЫ ==================== */
 
 /* Theme transition animation */
@@ -685,14 +944,13 @@ body {
   transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
-/* Disable transitions during theme change to prevent flashing */
+/* Disable transitions during theme change */
 .theme-transitioning * {
   transition: none !important;
 }
 
 /* ==================== СВЕТЛАЯ ТЕМА - ПЕРЕОПРЕДЕЛЕНИЯ ==================== */
 
-/* Theme-specific text colors */
 [data-theme="light"] .text-gray-400 {
   color: var(--text-muted);
 }
@@ -721,7 +979,6 @@ body {
   color: #dc2626;
 }
 
-/* Background overlays for bet lists */
 [data-theme="light"] .bg-\[rgba\(0\,0\,0\,0\.45\)\] {
   background: linear-gradient(135deg,
       rgba(255, 255, 255, 0.9) 0%,
@@ -734,13 +991,10 @@ body {
     inset 0 1px 3px rgba(255, 255, 255, 0.8);
 }
 
-/* Light theme bet item backgrounds */
 [data-theme="light"] .bg-\[rgba\(255\,255\,255\,0\.02\)\] {
   background: rgba(15, 23, 42, 0.04) !important;
 }
 
-/* Additional theme-specific improvements */
-/* Gradient backgrounds for bet items in light theme */
 [data-theme="light"] .bg-gradient-to-r.from-pink-500\/10.to-cyan-500\/10 {
   background: linear-gradient(to right,
       rgba(236, 72, 153, 0.12) 0%,
@@ -771,7 +1025,6 @@ body {
   box-shadow: 0 10px 15px -3px rgba(34, 197, 94, 0.2), 0 4px 6px -2px rgba(34, 197, 94, 0.1) !important;
 }
 
-/* Wheel pointer and center styling for light theme */
 [data-theme="light"] .wheel-center {
   background-color: var(--bg-primary);
   border: 2px solid var(--text-primary);
@@ -793,7 +1046,6 @@ body {
   .input-neon {
     padding: 0.75rem;
     font-size: 16px;
-    /* Prevent zoom on iOS */
   }
 
   .balance-display {
@@ -806,17 +1058,14 @@ body {
 
   .neon-btn {
     min-height: 44px;
-    /* Touch-friendly */
     font-size: 14px;
   }
 
   .glass-card {
     border-radius: 12px;
-    /* Smaller radius on mobile */
   }
 }
 
-/* Мобильные улучшения для рулетки */
 @media (max-width: 480px) {
   .wheel-pointer svg {
     width: 30px;
