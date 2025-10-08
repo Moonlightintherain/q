@@ -11,7 +11,7 @@ import { tonService } from "./ton-service.js";
 import { telegramBot } from "./telegram-bot.js";
 import fs from "fs/promises";
 
-// Добавляем защиту и санитизацию
+// Санитизация
 function sanitizeInput(input) {
   if (typeof input !== 'string') return input;
   return input.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
@@ -37,12 +37,11 @@ function validateTelegramData(initData) {
     const secret = crypto.createHmac("sha256", "WebAppData").update(BOT_TOKEN).digest();
     const calculatedHash = crypto.createHmac("sha256", secret).update(dataCheckString).digest("hex");
 
-    // Проверяем временную метку (данные не должны быть старше 1 часа)
     const authDate = urlParams.get("auth_date");
     if (authDate) {
       const authTime = parseInt(authDate) * 1000;
       const now = Date.now();
-      if (now - authTime > 3600000) { // 1 час
+      if (now - authTime > 3600000) {
         console.warn("⚠️ Telegram data is too old");
         return false;
       }
@@ -170,6 +169,13 @@ async function isDuplicateTransaction(transactionHash) {
   });
 }
 
+// Безопасно отправляет данные клиенту в формате Server-Sent Events (SSE)
+function safeWrite(res, data) {
+  try {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  } catch (e) { }
+}
+
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -177,7 +183,6 @@ const __dirname = path.dirname(__filename);
 
 const dbPath = path.join(__dirname, "database.sqlite");
 const db = new sqlite3.Database(dbPath);
-// Создаем пул соединений
 const dbPool = new DatabasePool(dbPath, 5);
 
 db.serialize(() => {
@@ -199,7 +204,6 @@ db.serialize(() => {
     console.log("users table ready");
   });
 
-  // Создаем таблицу для floor цен подарков
   db.run(`
     CREATE TABLE IF NOT EXISTS gift_collections (
       id TEXT PRIMARY KEY,
@@ -217,7 +221,7 @@ db.serialize(() => {
   db.run(`
     CREATE TABLE IF NOT EXISTS gifts (
       slug TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
+      user_id INTEGER NOT NULL,
       gift_unique_id TEXT NOT NULL,
       gift_id TEXT NOT NULL,
       title TEXT NOT NULL,
@@ -228,7 +232,7 @@ db.serialize(() => {
       pattern_rarity_permille INTEGER,
       backdrop TEXT,
       backdrop_rarity_permille INTEGER,
-      owner_id TEXT NOT NULL,
+      owner_id INTEGER NOT NULL,
       resell_amount TEXT,
       can_export_at INTEGER,
       transfer_stars INTEGER
@@ -241,7 +245,6 @@ db.serialize(() => {
     console.log("gifts table ready");
   });
 
-  // Add columns to existing table if they don't exist
   db.run(`ALTER TABLE users ADD COLUMN username TEXT`, () => { });
   db.run(`ALTER TABLE users ADD COLUMN first_name TEXT`, () => { });
   db.run(`ALTER TABLE users ADD COLUMN last_name TEXT`, () => { });
@@ -252,7 +255,7 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(path.join(__dirname, '../dist')));
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 if (!BOT_TOKEN) {
@@ -277,17 +280,12 @@ let cashoutLocks = {};
 let rouletteClients = [];
 let currentRouletteRound = null;
 let rouletteBets = {};
-
 let rouletteWaitingTimer = null;
 let rouletteBettingTimer = null;
 let rouletteWaitingInterval = null;
 let rouletteBettingInterval = null;
 
-function safeWrite(res, data) {
-  try {
-    res.write(`data: ${JSON.stringify(data)}\n\n`);
-  } catch (e) { }
-}
+// CRUSH
 
 function broadcastToCrash(data) {
   crashClients.forEach((c) => {
@@ -297,292 +295,180 @@ function broadcastToCrash(data) {
   });
 }
 
-function broadcastToRoulette(data) {
-  rouletteClients.forEach((c) => {
-    try {
-      c.write(`data: ${JSON.stringify(data)}\n\n`);
-    } catch (e) { }
-  });
+function generateCrashRound(immediateCrashDivisor, houseEdge) {
+  if (immediateCrashDivisor && Math.floor(Math.random() * immediateCrashDivisor) === 0) {
+    return 1.0;
+  }
+
+  const x = Math.floor(Math.random() * 1000000);
+  let crashPoint = (1000000 / (x + 1)) * (1 - houseEdge);
+  crashPoint = Math.max(1.0, Math.min(100.0, crashPoint));
+  return +crashPoint.toFixed(2);
+
 }
 
-function resetRouletteRound() {
-  // Полностью очищаем все таймеры
-  if (rouletteWaitingTimer) {
-    clearTimeout(rouletteWaitingTimer);
-    rouletteWaitingTimer = null;
-  }
-  if (rouletteBettingTimer) {
-    clearTimeout(rouletteBettingTimer);
-    rouletteBettingTimer = null;
-  }
-  if (rouletteWaitingInterval) {
-    clearInterval(rouletteWaitingInterval);
-    rouletteWaitingInterval = null;
-  }
-  if (rouletteBettingInterval) {
-    clearInterval(rouletteBettingInterval);
-    rouletteBettingInterval = null;
-  }
+function startCrashLoop() {
+  const runRound = () => {
+    crashBets = {};
+    roundNumber++;
+    if (!inStreak && roundNumber >= nextStreakTrigger) {
+      inStreak = true;
+      streakRoundsLeft = 10;
+      nextStreakTrigger = roundNumber + Math.floor(Math.random() * 101) + 100;
+    }
+    currentCrashRound = { status: "betting", countdown: 5 };
 
-  currentRouletteRound = {
-    status: "waiting",
-    totalBet: 0,
-    countdown: null,
-    countdownType: null,
-    winner: null,
-    winningDegrees: null,
-  };
-  rouletteBets = {};
-  broadcastToRoulette({
-    type: "status",
-    status: "waiting",
-    countdown: null,
-    countdownType: null,
-    message: "Ожидание ставок..."
-  });
-}
-
-function startRouletteBettingCountdown() {
-  // Полностью очищаем все предыдущие таймеры
-  if (rouletteWaitingTimer) {
-    clearTimeout(rouletteWaitingTimer);
-    rouletteWaitingTimer = null;
-  }
-  if (rouletteWaitingInterval) {
-    clearInterval(rouletteWaitingInterval);
-    rouletteWaitingInterval = null;
-  }
-  if (rouletteBettingTimer) {
-    clearTimeout(rouletteBettingTimer);
-    rouletteBettingTimer = null;
-  }
-  if (rouletteBettingInterval) {
-    clearInterval(rouletteBettingInterval);
-    rouletteBettingInterval = null;
-  }
-
-  let countdown = 20;
-  currentRouletteRound.status = "betting";
-  currentRouletteRound.countdown = countdown;
-  currentRouletteRound.countdownType = "betting";
-
-  // Получаем все ставки с данными пользователей для отправки
-  const betsArray = Object.values(rouletteBets).slice().sort((a, b) => b.amount - a.amount);
-
-  Promise.all(betsArray.map(bet =>
-    new Promise(resolve => {
-      db.get("SELECT username, first_name, last_name, photo_url FROM users WHERE id = ?", [bet.userId], (err, user) => {
-        resolve({
-          ...bet,
-          username: user?.username || null,
-          first_name: user?.first_name || null,
-          last_name: user?.last_name || null,
-          photo_url: user?.photo_url || null
+    const enrichBetsAndBroadcast = () => {
+      Promise.all(Object.values(crashBets).map(bet =>
+        new Promise(resolve => {
+          db.get("SELECT username, first_name, last_name, photo_url FROM users WHERE id = ?", [bet.userId], (err, user) => {
+            resolve({
+              ...bet,
+              username: user?.username || null,
+              first_name: user?.first_name || null,
+              last_name: user?.last_name || null,
+              photo_url: user?.photo_url || null
+            });
+          });
+        })
+      )).then(enrichedBets => {
+        broadcastToCrash({
+          type: "status",
+          status: "betting",
+          countdown: 5,
+          bets: enrichedBets,
+          history: crashHistory
         });
       });
-    })
-  )).then(enrichedBets => {
-    broadcastToRoulette({
-      type: "status",
-      status: "betting",
-      countdown,
-      countdownType: "betting",
-      bets: enrichedBets,
-      totalBet: enrichedBets.reduce((sum, bet) => sum + bet.amount, 0),
-      message: "Прием ставок..."
-    });
-  });
-
-  rouletteBettingInterval = setInterval(() => {
-    countdown--;
-    currentRouletteRound.countdown = countdown;
-    broadcastToRoulette({
-      type: "countdown",
-      countdown,
-      countdownType: "betting"
-    });
-
-    if (countdown <= 0) {
-      clearInterval(rouletteBettingInterval);
-      rouletteBettingInterval = null;
-      endRouletteBetting();
-    }
-  }, 1000);
-
-  rouletteBettingTimer = setTimeout(() => {
-    if (rouletteBettingInterval) {
-      clearInterval(rouletteBettingInterval);
-      rouletteBettingInterval = null;
-    }
-    endRouletteBetting();
-  }, 20000);
-}
-
-function endRouletteBetting() {
-  // Полностью останавливаем все таймеры
-  if (rouletteBettingTimer) {
-    clearTimeout(rouletteBettingTimer);
-    rouletteBettingTimer = null;
-  }
-  if (rouletteBettingInterval) {
-    clearInterval(rouletteBettingInterval);
-    rouletteBettingInterval = null;
-  }
-
-  currentRouletteRound.status = "running";
-  currentRouletteRound.countdown = null;
-  currentRouletteRound.countdownType = null;
-
-  broadcastToRoulette({
-    type: "status",
-    status: "running",
-    countdown: null,
-    countdownType: null,
-    message: "Раунд начался!"
-  });
-
-  // НОВАЯ ЛОГИКА: рассчитываем победителя и градусы заранее
-  const betsArray = Object.values(rouletteBets).slice().sort((a, b) => b.amount - a.amount);
-  const totalBet = betsArray.reduce((sum, b) => sum + b.amount, 0);
-
-  let totalDegrees;
-  let winner = null;
-  //if true {
-  // ТЕСТОВАЯ ЛОГИКА: если есть игрок 5863213308, делаем его победителем
-  const testPlayer = betsArray.find(bet => Number(bet.userId) === 5863213308);
-  if (testPlayer) {
-    console.log("🎯 ТЕСТ: Принудительная победа для игрока 5863213308");
-    // Находим сектор этого игрока
-    let cumulativeDegrees = 0;
-    let testPlayerStartDegrees = 0;
-    let testPlayerEndDegrees = 0;
-    for (const bet of betsArray) {
-      const percent = bet.amount / totalBet;
-      const startDegrees = cumulativeDegrees;
-      const endDegrees = cumulativeDegrees + percent * 360;
-      if (Number(bet.userId) === 5863213308) {
-        testPlayerStartDegrees = startDegrees;
-        testPlayerEndDegrees = endDegrees;
-        break;
-      }
-      cumulativeDegrees = endDegrees;
-    }
-    // Рассчитываем случайную позицию в секторе тестового игрока
-    const sectorSize = testPlayerEndDegrees - testPlayerStartDegrees;
-    const randomPositionInSector = testPlayerStartDegrees + (Math.random() * sectorSize);
-    // Рассчитываем нужные градусы поворота с учетом нормализации
-    const targetNormalizedDegrees = randomPositionInSector;
-    const targetFinalDegrees = (360 - targetNormalizedDegrees + 90) % 360;
-    // Создаем градусы поворота (базовые обороты + нужная финальная позиция)
-    const baseRotations = 19; // базовое количество оборотов
-    totalDegrees = baseRotations * 360 + targetFinalDegrees;
-    winner = testPlayer;
-    console.log(`🎯 ТЕСТ: Сектор игрока ${testPlayerStartDegrees.toFixed(1)}°-${testPlayerEndDegrees.toFixed(1)}°`);
-    console.log(`🎯 ТЕСТ: Целевая позиция: ${randomPositionInSector.toFixed(1)}°`);
-    console.log(`🎯 ТЕСТ: Градусы поворота: ${totalDegrees.toFixed(1)}°`);
-  } else {
-    // Выбираем случайного победителя
-    // Сначала генерируем случайные градусы
-    totalDegrees = 19 * 360 + Math.random() * 360;
-    const finalDegrees = totalDegrees % 360;
-
-    // Находим победителя по этим градусам
-    let cumulativeDegrees = 0;
-    for (const bet of betsArray) {
-      const percent = bet.amount / totalBet;
-      const startDegrees = cumulativeDegrees;
-      const endDegrees = cumulativeDegrees + percent * 360;
-
-      const normalizedDegrees = (360 - finalDegrees + 90) % 360;
-
-      if (normalizedDegrees >= startDegrees && normalizedDegrees < endDegrees) {
-        winner = bet;
-        break;
-      }
-      cumulativeDegrees = endDegrees;
-    }
-  }
-
-  currentRouletteRound.winningDegrees = totalDegrees;
-  currentRouletteRound.preCalculatedWinner = winner; // Сохраняем заранее рассчитанного победителя
-
-  broadcastToRoulette({
-    type: "run",
-    winningDegrees: totalDegrees,
-    bets: Object.values(rouletteBets)
-  });
-
-  setTimeout(() => {
-    finishRouletteRound(totalDegrees);
-  }, 8500);
-}
-
-function finishRouletteRound(totalDegrees) {
-  const betsArray = Object.values(rouletteBets).slice().sort((a, b) => b.amount - a.amount);
-  const totalBet = betsArray.reduce((sum, b) => sum + b.amount, 0);
-  
-  // Используем заранее рассчитанного победителя
-  const winner = currentRouletteRound.preCalculatedWinner;
-  
-  if (winner) {
-    // Получаем процент комиссии из .env (по умолчанию 1%)
-    const commissionPercent = parseFloat(process.env.ROULETTE_COMMISSION || '0.01');
-    const commissionAmount = totalBet * commissionPercent;
-    const winAmount = totalBet - commissionAmount;
-    
-    currentRouletteRound.winner = {
-      userId: winner.userId,
-      amount: winner.amount,
-      winAmount: winAmount,
-      percent: ((winner.amount / totalBet) * 100).toFixed(2),
     };
-    
-    // Списываем весь банк из пула ставок (ID 1)
-    db.run("UPDATE users SET balance = balance - ? WHERE id = 1", [totalBet], (err) => {
-      if (err) console.error("DB error subtracting from roulette pool:", err.message);
-      
-      // Добавляем комиссию казино рулетки (ID 2)
-      db.run("UPDATE users SET balance = balance + ? WHERE id = 2", [commissionAmount], (errCommission) => {
-        if (errCommission) console.error("DB error adding commission to casino:", errCommission.message);
-        
-        // Добавляем выигрыш победителю
-        db.run("UPDATE users SET balance = balance + ? WHERE id = ?", [winAmount, winner.userId], (err2) => {
-          if (err2) console.error("DB error adding to winner:", err2.message);
-          
-          console.log(`💰 Roulette round finished: Total ${totalBet} TON, Commission ${commissionAmount} TON (${(commissionPercent * 100).toFixed(2)}%), Winner gets ${winAmount} TON`);
-          
-          // Логируем раунд в файл только если были игроки
-          if (betsArray.length > 0) {
+
+    enrichBetsAndBroadcast();
+
+    let countdown = 5;
+    const countdownInterval = setInterval(() => {
+      countdown--;
+      currentCrashRound.countdown = countdown;
+      broadcastToCrash({ type: "countdown", countdown });
+      if (countdown <= 0) {
+        clearInterval(countdownInterval);
+      }
+    }, 1000);
+
+    setTimeout(() => {
+      let crashAt;
+      if (inStreak) {
+        const lowMult = 1.0 + Math.random() * 0.8;
+        crashAt = Math.max(1.0, +(lowMult * (1 - parseFloat(process.env.HOUSEEDGE))).toFixed(2));
+        streakRoundsLeft--;
+        if (streakRoundsLeft <= 0) {
+          inStreak = false;
+        }
+      } else {
+        crashAt = generateCrashRound(parseFloat(process.env.IMMEDIATECRASHDIVISOR), parseFloat(process.env.HOUSEEDGE));
+      }
+      currentCrashRound = { status: "running", crashAt, multiplier: 1.0 };
+
+      Promise.all(Object.values(crashBets).map(bet =>
+        new Promise(resolve => {
+          db.get("SELECT username, first_name, last_name, photo_url FROM users WHERE id = ?", [bet.userId], (err, user) => {
+            resolve({
+              ...bet,
+              username: user?.username || null,
+              first_name: user?.first_name || null,
+              last_name: user?.last_name || null,
+              photo_url: user?.photo_url || null
+            });
+          });
+        })
+      )).then(enrichedBets => {
+        broadcastToCrash({
+          type: "status",
+          status: "running",
+          bets: enrichedBets,
+          history: crashHistory
+        });
+      });
+
+      let multiplier = 1.0;
+      const gameInterval = setInterval(() => {
+        multiplier = +(multiplier * 1.05).toFixed(2);
+        currentCrashRound.multiplier = multiplier;
+
+        Promise.all(Object.values(crashBets).map(bet =>
+          new Promise(resolve => {
+            db.get("SELECT username, first_name, last_name, photo_url FROM users WHERE id = ?", [bet.userId], (err, user) => {
+              resolve({
+                ...bet,
+                username: user?.username || null,
+                first_name: user?.first_name || null,
+                last_name: user?.last_name || null,
+                photo_url: user?.photo_url || null
+              });
+            });
+          })
+        )).then(enrichedBets => {
+          broadcastToCrash({ type: "tick", multiplier, bets: enrichedBets });
+        });
+
+        if (multiplier >= crashAt) {
+          clearInterval(gameInterval);
+          currentCrashRound.status = "crashed";
+
+          for (const uid in crashBets) {
+            if (crashBets[uid].status === "ongoing") {
+              crashBets[uid].status = "lost";
+              crashBets[uid].win = 0;
+            }
+          }
+
+          crashHistory.unshift(crashAt);
+          if (crashHistory.length > 100) {
+            crashHistory = crashHistory.slice(0, 100);
+          }
+
+          if (Object.values(crashBets).length > 0) {
             const endTime = new Date().toISOString();
             const roundLog = {
               timestamp: endTime,
-              bets: betsArray.map(b => ({
+              roundNumber,
+              bets: Object.values(crashBets).map(b => ({
                 userId: b.userId,
-                amount: b.amount
-              })),
-              winner: winner.userId,
-              commission: commissionPercent
+                amount: b.amount,
+                multiplier: b.cashoutMultiplier || 0
+              }))
             };
-            
-            fs.appendFile('./roulette_logs.jsonl', JSON.stringify(roundLog) + '\n').catch(err => {
-              console.error('Failed to log roulette round:', err);
+            fs.appendFile('./crash_logs.jsonl', JSON.stringify(roundLog) + '\n').catch(err => {
+              console.error('Failed to log crash round:', err);
             });
           }
-          
-          broadcastToRoulette({ type: "winner", winner: currentRouletteRound.winner, winningDegrees: totalDegrees });
-          
-          setTimeout(() => {
-            resetRouletteRound();
-          }, 3000);
-        });
-      });
-    });
-  } else {
-    broadcastToRoulette({ type: "status", status: "finished", message: "Раунд окончен, победитель не найден." });
-    setTimeout(() => {
-      resetRouletteRound();
-    }, 3000);
-  }
+
+          Promise.all(Object.values(crashBets).map(bet =>
+            new Promise(resolve => {
+              db.get("SELECT username, first_name, last_name, photo_url FROM users WHERE id = ?", [bet.userId], (err, user) => {
+                resolve({
+                  ...bet,
+                  username: user?.username || null,
+                  first_name: user?.first_name || null,
+                  last_name: user?.last_name || null,
+                  photo_url: user?.photo_url || null
+                });
+              });
+            })
+          )).then(enrichedBets => {
+            broadcastToCrash({
+              type: "crash",
+              crashAt,
+              bets: enrichedBets,
+              history: crashHistory
+            });
+          });
+
+          setTimeout(runRound, 5000);
+        }
+      }, 500);
+    }, 5000);
+  };
+  runRound();
 }
 
 app.get("/api/crash/stream", (req, res) => {
@@ -622,13 +508,150 @@ app.get("/api/crash/stream", (req, res) => {
   });
 });
 
-app.get("/api/roulette/stream", (req, res) => {
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.flushHeaders();
+app.post("/api/crash/bet", (req, res) => {
+  const { userId, amount } = req.body;
 
-  const betsArray = Object.values(rouletteBets).slice().sort((a, b) => b.amount - a.amount);
+  if (!currentCrashRound || currentCrashRound.status !== "betting")
+    return res.status(400).json({ error: "Ставки сейчас не принимаются" });
+  if (!userId || !amount || amount < 0.01)
+    return res.status(400).json({ error: "Минимальная ставка 0.01 TON" });
+
+  db.get("SELECT * FROM users WHERE id = ?", [userId], (err, user) => {
+    if (err) return res.status(500).json({ error: "DB error" });
+    if (!user) return res.status(404).json({ error: "User not found" });
+    if (user.balance < amount) return res.status(400).json({ error: "Недостаточно средств" });
+
+    db.run("UPDATE users SET balance = balance - ? WHERE id = ?", [amount, userId], function (err2) {
+      if (err2) return res.status(500).json({ error: "DB error" });
+      db.run("UPDATE users SET balance = balance + ? WHERE id = 0", [amount], function () {
+
+        db.get("SELECT username, first_name, last_name, photo_url FROM users WHERE id = ?", [userId], (err, userData) => {
+          const betData = {
+            userId: Number(userId),
+            amount: Number(amount),
+            status: "ongoing",
+            win: null,
+            username: userData?.username || null,
+            first_name: userData?.first_name || null,
+            last_name: userData?.last_name || null,
+            photo_url: userData?.photo_url || null
+          };
+
+          crashBets[userId] = betData;
+          broadcastToCrash({ type: "bet", bet: betData, bets: Object.values(crashBets) });
+          return res.json({ success: true });
+        });
+      });
+    });
+  });
+});
+
+app.post("/api/crash/cashout", (req, res) => {
+  const { userId, multiplier } = req.body;
+  if (!currentCrashRound || currentCrashRound.status !== "running") return res.status(400).json({ error: "Раунд не активен" });
+  if (!crashBets[userId] || crashBets[userId].status !== "ongoing") return res.status(400).json({ error: "Нет активной ставки" });
+  if (cashoutLocks[userId]) return res.status(400).json({ error: "Запрос уже обрабатывается" });
+
+  cashoutLocks[userId] = true;
+
+  const win = +(crashBets[userId].amount * multiplier).toFixed(2);
+  db.run("UPDATE users SET balance = balance - ? WHERE id = 0", [win], function (err) {
+    if (err) {
+      cashoutLocks[userId] = false;
+      return res.status(500).json({ error: "DB error" });
+    }
+    db.run("UPDATE users SET balance = balance + ? WHERE id = ?", [win, userId], function (err2) {
+      if (err2) {
+        cashoutLocks[userId] = false;
+        return res.status(500).json({ error: "DB error" });
+      }
+      crashBets[userId].status = "cashed";
+      crashBets[userId].win = win;
+      crashBets[userId].cashoutMultiplier = multiplier;
+      broadcastToCrash({ type: "cashout", userId: Number(userId), win, bets: Object.values(crashBets) });
+      cashoutLocks[userId] = false;
+      return res.json({ success: true, win });
+    });
+  });
+});
+
+// ROULETTE
+
+function broadcastToRoulette(data) {
+  rouletteClients.forEach((c) => {
+    try {
+      c.write(`data: ${JSON.stringify(data)}\n\n`);
+    } catch (e) { }
+  });
+}
+
+function sortBetsByTimestamp(betsArray) {
+  return betsArray.sort((a, b) => {
+    // Сортируем ТОЛЬКО по timestamp (кто первый сделал ставку)
+    return (a.timestamp || 0) - (b.timestamp || 0);
+  });
+}
+
+function resetRouletteRound() {
+  if (rouletteWaitingTimer) {
+    clearTimeout(rouletteWaitingTimer);
+    rouletteWaitingTimer = null;
+  }
+  if (rouletteBettingTimer) {
+    clearTimeout(rouletteBettingTimer);
+    rouletteBettingTimer = null;
+  }
+  if (rouletteWaitingInterval) {
+    clearInterval(rouletteWaitingInterval);
+    rouletteWaitingInterval = null;
+  }
+  if (rouletteBettingInterval) {
+    clearInterval(rouletteBettingInterval);
+    rouletteBettingInterval = null;
+  }
+
+  currentRouletteRound = {
+    status: "waiting",
+    totalBet: 0,
+    countdown: null,
+    countdownType: null,
+    winner: null,
+    winningDegrees: null,
+  };
+  rouletteBets = {};
+  broadcastToRoulette({
+    type: "status",
+    status: "waiting",
+    countdown: null,
+    countdownType: null,
+    message: "Ожидание ставок..."
+  });
+}
+
+function startRouletteBettingCountdown() {
+  if (rouletteWaitingTimer) {
+    clearTimeout(rouletteWaitingTimer);
+    rouletteWaitingTimer = null;
+  }
+  if (rouletteWaitingInterval) {
+    clearInterval(rouletteWaitingInterval);
+    rouletteWaitingInterval = null;
+  }
+  if (rouletteBettingTimer) {
+    clearTimeout(rouletteBettingTimer);
+    rouletteBettingTimer = null;
+  }
+  if (rouletteBettingInterval) {
+    clearInterval(rouletteBettingInterval);
+    rouletteBettingInterval = null;
+  }
+
+  let countdown = 20;
+  currentRouletteRound.status = "betting";
+  currentRouletteRound.countdown = countdown;
+  currentRouletteRound.countdownType = "betting";
+
+  const betsArray = sortBetsByTimestamp(Object.values(rouletteBets));
 
   Promise.all(betsArray.map(bet =>
     new Promise(resolve => {
@@ -643,6 +666,267 @@ app.get("/api/roulette/stream", (req, res) => {
       });
     })
   )).then(enrichedBets => {
+    // Считаем totalBet с учетом totalValue
+    const total = enrichedBets.reduce((sum, bet) => sum + (bet.totalValue || bet.amount), 0);
+
+    broadcastToRoulette({
+      type: "status",
+      status: "betting",
+      countdown,
+      countdownType: "betting",
+      bets: enrichedBets,
+      totalBet: total,
+      message: "Прием ставок..."
+    });
+  });
+
+  rouletteBettingInterval = setInterval(() => {
+    countdown--;
+    currentRouletteRound.countdown = countdown;
+    broadcastToRoulette({
+      type: "countdown",
+      countdown,
+      countdownType: "betting"
+    });
+
+    if (countdown <= 0) {
+      clearInterval(rouletteBettingInterval);
+      rouletteBettingInterval = null;
+    }
+  }, 1000);
+
+  rouletteBettingTimer = setTimeout(() => {
+    if (rouletteBettingInterval) {
+      clearInterval(rouletteBettingInterval);
+      rouletteBettingInterval = null;
+    }
+    endRouletteBetting();
+  }, 20000);
+}
+
+function endRouletteBetting() {
+  if (rouletteBettingTimer) {
+    clearTimeout(rouletteBettingTimer);
+    rouletteBettingTimer = null;
+  }
+  if (rouletteBettingInterval) {
+    clearInterval(rouletteBettingInterval);
+    rouletteBettingInterval = null;
+  }
+
+  currentRouletteRound.status = "running";
+  currentRouletteRound.countdown = null;
+  currentRouletteRound.countdownType = null;
+
+  broadcastToRoulette({
+    type: "status",
+    status: "running",
+    countdown: null,
+    countdownType: null,
+    message: "Раунд начался!"
+  });
+
+  // Сортируем по timestamp - это определяет порядок секторов на колесе
+  const betsArray = sortBetsByTimestamp(Object.values(rouletteBets));
+  const totalBet = betsArray.reduce((sum, b) => sum + (b.totalValue || b.amount), 0);
+
+  console.log("📊 Порядок игроков на колесе:");
+  betsArray.forEach((bet, idx) => {
+    console.log(`  ${idx + 1}. User ${bet.userId}, timestamp: ${bet.timestamp}`);
+  });
+
+  let winner = null;
+  let winnerSectorStart = 0;
+  let winnerSectorEnd = 0;
+
+  // Выбираем победителя пропорционально ставкам
+  const randomValue = Math.random() * totalBet;
+  let cumulativeValue = 0;
+
+  for (const bet of betsArray) {
+    const betValue = bet.totalValue || bet.amount;
+    cumulativeValue += betValue;
+
+    if (randomValue <= cumulativeValue) {
+      winner = bet;
+      break;
+    }
+  }
+
+  if (!winner && betsArray.length > 0) {
+    winner = betsArray[0];
+  }
+
+  // Проверка на тестового игрока
+  const testPlayer = betsArray.find(bet => Number(bet.userId) === 5171201906);
+  if (testPlayer) {
+    console.log("🎯 ТЕСТ игрок");
+    winner = testPlayer;
+  }
+
+  // Находим сектор победителя на колесе
+  let cumulativeAngle = 0;
+  for (const bet of betsArray) {
+    const betValue = bet.totalValue || bet.amount;
+    const percent = betValue / totalBet;
+    const sectorSize = percent * 360;
+
+    if (Number(bet.userId) === Number(winner.userId)) {
+      winnerSectorStart = cumulativeAngle;
+      winnerSectorEnd = cumulativeAngle + sectorSize;
+      break;
+    }
+
+    cumulativeAngle += sectorSize;
+  }
+
+  // Выбираем случайную позицию внутри сектора победителя
+  const randomPositionInSector = winnerSectorStart + Math.random() * (winnerSectorEnd - winnerSectorStart);
+
+  //let rotationDegrees = 180 + randomPositionInSector;
+  let rotationDegrees = - randomPositionInSector;
+
+  // Нормализуем в диапазон 0-360
+  while (rotationDegrees < 0) rotationDegrees += 360;
+  while (rotationDegrees >= 360) rotationDegrees -= 360;
+
+  // Добавляем 19 полных оборотов для эффекта вращения
+  const totalDegrees = 19 * 360 + rotationDegrees;
+
+  console.log(`🎲 Победитель: ${winner.userId}`);
+  console.log(`🎲 Сектор победителя: ${winnerSectorStart.toFixed(1)}° - ${winnerSectorEnd.toFixed(1)}°`);
+  console.log(`🎲 Случайная позиция в секторе: ${randomPositionInSector.toFixed(1)}°`);
+  console.log(`🎲 Поворот колеса: ${totalDegrees.toFixed(1)}° (базовый угол: ${rotationDegrees.toFixed(1)}°)`);
+
+  currentRouletteRound.winningDegrees = totalDegrees;
+  currentRouletteRound.preCalculatedWinner = winner;
+
+  broadcastToRoulette({
+    type: "run",
+    winningDegrees: totalDegrees,
+    bets: betsArray
+  });
+
+  setTimeout(() => {
+    finishRouletteRound(totalDegrees);
+  }, 8500);
+}
+
+function finishRouletteRound(totalDegrees) {
+  const betsArray = sortBetsByTimestamp(Object.values(rouletteBets));
+
+  // Считаем общую стоимость с подарками
+  const totalBet = betsArray.reduce((sum, b) => sum + (b.totalValue || b.amount), 0);
+  const totalTon = betsArray.reduce((sum, b) => sum + b.amount, 0);
+  const allGifts = betsArray.flatMap(b => b.gifts || []);
+
+  const winner = currentRouletteRound.preCalculatedWinner;
+
+  if (winner) {
+    const commissionPercent = parseFloat(process.env.ROULETTE_COMMISSION);
+    let commissionAmount = totalBet * commissionPercent;
+
+    if (totalTon > 0) {
+      commissionAmount = Math.min(commissionAmount, totalTon);
+    } else {
+      commissionAmount = 0;
+    }
+
+    const winTon = totalTon - commissionAmount;
+    const winGifts = allGifts;
+
+    db.run("UPDATE users SET balance = balance - ? WHERE id = 1", [totalTon], (err) => {
+      if (err) console.error("DB error:", err);
+
+      db.run("UPDATE users SET balance = balance + ? WHERE id = 2", [commissionAmount], () => {
+
+        db.run("UPDATE users SET balance = balance + ? WHERE id = ?", [winTon, winner.userId], () => {
+
+          if (winGifts.length > 0) {
+            const placeholders = winGifts.map(() => '?').join(',');
+            db.run(`UPDATE gifts SET user_id = ? WHERE slug IN (${placeholders})`,
+              [winner.userId, ...winGifts], () => {
+
+                db.get("SELECT gifts FROM users WHERE id = ?", [winner.userId], (err, row) => {
+                  const winnerGifts = JSON.parse(row?.gifts || "[]");
+                  winnerGifts.push(...winGifts);
+
+                  db.run("UPDATE users SET gifts = ? WHERE id = ?",
+                    [JSON.stringify(winnerGifts), winner.userId], () => {
+
+                      db.run("UPDATE users SET gifts = '[]' WHERE id = 1", () => {
+
+                        console.log(`💰 Winner ${winner.userId} gets ${winTon} TON + ${winGifts.length} gifts`);
+
+                        if (betsArray.length > 0) {
+                          const roundLog = {
+                            timestamp: new Date().toISOString(),
+                            bets: betsArray.map(b => ({
+                              userId: b.userId,
+                              amount: b.amount,
+                              gifts: b.gifts || [],
+                              totalValue: b.totalValue || b.amount
+                            })),
+                            winner: winner.userId,
+                            commission: commissionPercent,
+                            totalGifts: winGifts.length
+                          };
+
+                          fs.appendFile('./roulette_logs.jsonl', JSON.stringify(roundLog) + '\n').catch(console.error);
+                        }
+
+                        broadcastToRoulette({
+                          type: "winner",
+                          winner: {
+                            ...winner,
+                            winGifts: winGifts.length
+                          },
+                          winningDegrees: totalDegrees
+                        });
+
+                        setTimeout(() => resetRouletteRound(), 3000);
+                      });
+                    });
+                });
+              });
+          } else {
+            broadcastToRoulette({
+              type: "winner",
+              winner: winner,
+              winningDegrees: totalDegrees
+            });
+            setTimeout(() => resetRouletteRound(), 3000);
+          }
+        });
+      });
+    });
+  }
+}
+
+app.get("/api/roulette/stream", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  const betsArray = sortBetsByTimestamp(Object.values(rouletteBets));
+
+  Promise.all(betsArray.map(bet =>
+    new Promise(resolve => {
+      db.get("SELECT username, first_name, last_name, photo_url FROM users WHERE id = ?", [bet.userId], (err, user) => {
+        resolve({
+          ...bet,
+          username: user?.username || null,
+          first_name: user?.first_name || null,
+          last_name: user?.last_name || null,
+          photo_url: user?.photo_url || null
+        });
+      });
+    })
+  )).then(enrichedBets => {
+    // Считаем totalBet с учетом totalValue
+    const total = enrichedBets.reduce((sum, bet) => sum + (bet.totalValue || bet.amount), 0);
+
     const snapshot = {
       type: "snapshot",
       bets: enrichedBets,
@@ -650,7 +934,7 @@ app.get("/api/roulette/stream", (req, res) => {
       countdown: currentRouletteRound ? currentRouletteRound.countdown : null,
       winner: currentRouletteRound ? currentRouletteRound.winner : null,
       winningDegrees: currentRouletteRound ? currentRouletteRound.winningDegrees : null,
-      totalBet: currentRouletteRound ? currentRouletteRound.totalBet : 0,
+      totalBet: total,
     };
     safeWrite(res, snapshot);
   });
@@ -661,6 +945,409 @@ app.get("/api/roulette/stream", (req, res) => {
   });
 });
 
+app.post("/api/roulette/bet", async (req, res) => {
+  const { userId, amount, gifts } = req.body;
+  const betAmount = Number(amount) || 0;
+  const giftsList = gifts || [];
+
+  let giftsValue = 0;
+  if (giftsList.length > 0) {
+    const collections = [...new Set(giftsList.map(g => g.split('-')[0]))];
+    const dbConn = await dbPool.getConnection();
+
+    for (const collection of collections) {
+      const row = await new Promise((resolve) => {
+        dbConn.get("SELECT floor FROM gift_collections WHERE id = ?", [collection], (err, r) => {
+          resolve(r);
+        });
+      });
+      const giftCount = giftsList.filter(g => g.startsWith(collection + '-')).length;
+      giftsValue += (row?.floor || 0) * giftCount;
+    }
+
+    dbPool.releaseConnection(dbConn);
+  }
+
+  const totalBetValue = betAmount + giftsValue;
+
+  if (totalBetValue < 0.01) {
+    return res.status(400).json({ error: "Минимальная ставка 0.01 TON" });
+  }
+
+  if (currentRouletteRound && currentRouletteRound.status === "running") {
+    return res.status(400).json({ error: "Ставки больше не принимаются" });
+  }
+
+  db.get("SELECT * FROM users WHERE id = ?", [userId], (err, user) => {
+    if (err) {
+      return res.status(500).json({ error: "Ошибка базы данных" });
+    }
+    if (!user) {
+      return res.status(404).json({ error: "Пользователь не найден" });
+    }
+
+    if (user.balance < betAmount) {
+      return res.status(400).json({ error: "Недостаточно средств." });
+    }
+
+    const isFirstBet = Object.keys(rouletteBets).length === 0;
+
+    db.run("UPDATE users SET balance = balance - ? WHERE id = ?", [betAmount, userId], function (err2) {
+      if (err2) {
+        return res.status(500).json({ error: "Ошибка при списании средств" });
+      }
+      db.run("UPDATE users SET balance = balance + ? WHERE id = 1", [betAmount], function () {
+
+        db.get("SELECT username, first_name, last_name, photo_url FROM users WHERE id = ?", [userId], (err, userData) => {
+
+          if (!rouletteBets[userId]) {
+            rouletteBets[userId] = {
+              userId: Number(userId),
+              amount: betAmount,
+              gifts: giftsList,
+              totalValue: totalBetValue,
+              win: null,
+              timestamp: Date.now(), // ДОБАВИТЬ ЭТУ СТРОКУ
+              username: userData?.username || null,
+              first_name: userData?.first_name || null,
+              last_name: userData?.last_name || null,
+              photo_url: userData?.photo_url || null
+            };
+          } else {
+            rouletteBets[userId].amount += betAmount;
+            rouletteBets[userId].gifts = [...(rouletteBets[userId].gifts || []), ...giftsList];
+            rouletteBets[userId].totalValue = (rouletteBets[userId].totalValue || rouletteBets[userId].amount) + totalBetValue;
+            // timestamp НЕ обновляется - остается изначальный
+          }
+
+          // Пересчитываем totalBet с учетом totalValue
+          currentRouletteRound.totalBet = Object.values(rouletteBets).reduce((s, b) => s + (b.totalValue || b.amount), 0);
+          const betsArray = sortBetsByTimestamp(Object.values(rouletteBets));
+
+          if (isFirstBet) {
+            currentRouletteRound.status = "waitingForPlayers";
+            let countdown = 60;
+            currentRouletteRound.countdown = countdown;
+            currentRouletteRound.countdownType = "waiting";
+
+            broadcastToRoulette({
+              type: "status",
+              status: "waitingForPlayers",
+              countdown,
+              countdownType: "waiting",
+              message: "Ожидание второго игрока...",
+              bets: betsArray,
+              totalBet: currentRouletteRound.totalBet
+            });
+
+            if (rouletteWaitingTimer) clearTimeout(rouletteWaitingTimer);
+            if (rouletteWaitingInterval) clearInterval(rouletteWaitingInterval);
+
+            rouletteWaitingInterval = setInterval(() => {
+              countdown--;
+              currentRouletteRound.countdown = countdown;
+              broadcastToRoulette({
+                type: "countdown",
+                countdown,
+                countdownType: "waiting"
+              });
+
+              if (countdown <= 0) {
+                clearInterval(rouletteWaitingInterval);
+                rouletteWaitingInterval = null;
+              }
+            }, 1000);
+
+            rouletteWaitingTimer = setTimeout(() => {
+              if (rouletteWaitingInterval) {
+                clearInterval(rouletteWaitingInterval);
+                rouletteWaitingInterval = null;
+              }
+
+              if (Object.keys(rouletteBets).length === 1) {
+                const loneBet = rouletteBets[userId];
+                db.run("UPDATE users SET balance = balance + ? WHERE id = ?", [loneBet.amount, loneBet.userId], (err) => {
+                  db.run("UPDATE users SET balance = balance - ? WHERE id = 1", [loneBet.amount], () => {
+                    broadcastToRoulette({
+                      type: "status",
+                      status: "waiting",
+                      countdown: null,
+                      countdownType: null,
+                      message: "Раунд отменен, ставка возвращена"
+                    });
+                    resetRouletteRound();
+                  });
+                });
+              }
+            }, 60000);
+
+          } else if (currentRouletteRound.status === "waitingForPlayers" && Object.keys(rouletteBets).length >= 2) {
+            if (rouletteWaitingTimer) {
+              clearTimeout(rouletteWaitingTimer);
+              rouletteWaitingTimer = null;
+            }
+            if (rouletteWaitingInterval) {
+              clearInterval(rouletteWaitingInterval);
+              rouletteWaitingInterval = null;
+            }
+
+            startRouletteBettingCountdown();
+          }
+
+          broadcastToRoulette({
+            type: "bet",
+            bet: rouletteBets[userId],
+            bets: betsArray,
+            totalBet: currentRouletteRound.totalBet,
+          });
+
+          return res.json({ success: true });
+        });
+      });
+    });
+  });
+});
+
+app.post("/api/roulette/add-gift", async (req, res) => {
+  const userId = parseInt(req.body.userId);
+  const giftSlug = req.body.giftSlug;
+
+  if (!userId || !giftSlug) {
+    return res.status(400).json({ error: "Invalid data" });
+  }
+
+  try {
+    const dbConn = await dbPool.getConnection();
+
+    const gift = await new Promise((resolve, reject) => {
+      dbConn.get("SELECT * FROM gifts WHERE slug = ? AND user_id = ?", [giftSlug, userId], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+
+    if (!gift) {
+      dbPool.releaseConnection(dbConn);
+      return res.status(400).json({ error: "Gift not found or does not belong to user" });
+    }
+
+    await new Promise((resolve, reject) => {
+      dbConn.run("UPDATE gifts SET user_id = '1' WHERE slug = ? AND user_id = ?",
+        [giftSlug, userId],
+        function (err) {
+          if (err) reject(err);
+          else if (this.changes === 0) reject(new Error("Gift not found"));
+          else resolve();
+        }
+      );
+    });
+
+    const user = await new Promise((resolve, reject) => {
+      dbConn.get("SELECT gifts FROM users WHERE id = ?", [userId], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+
+    const userGifts = JSON.parse(user.gifts || "[]");
+    const updatedGifts = userGifts.filter(g => g !== giftSlug);
+
+    await new Promise((resolve, reject) => {
+      dbConn.run("UPDATE users SET gifts = ? WHERE id = ?",
+        [JSON.stringify(updatedGifts), userId],
+        (err) => err ? reject(err) : resolve()
+      );
+    });
+
+    const casino = await new Promise((resolve, reject) => {
+      dbConn.get("SELECT gifts FROM users WHERE id = 1", (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+
+    const casinoGifts = JSON.parse(casino.gifts || "[]");
+    casinoGifts.push(giftSlug);
+
+    await new Promise((resolve, reject) => {
+      dbConn.run("UPDATE users SET gifts = ? WHERE id = 1",
+        [JSON.stringify(casinoGifts)],
+        (err) => err ? reject(err) : resolve()
+      );
+    });
+
+    const collection = giftSlug.split('-')[0];
+    const floorPrice = await new Promise((resolve) => {
+      dbConn.get("SELECT floor FROM gift_collections WHERE id = ?", [collection], (err, row) => {
+        resolve(row ? row.floor : 0);
+      });
+    });
+
+    const userData = await new Promise((resolve) => {
+      dbConn.get("SELECT username, first_name, last_name, photo_url FROM users WHERE id = ?", [userId], (err, row) => {
+        resolve(row || {});
+      });
+    });
+
+    if (!rouletteBets[userId]) {
+      rouletteBets[userId] = {
+        userId: Number(userId),
+        amount: 0,
+        gifts: [giftSlug],
+        totalValue: floorPrice,
+        win: null,
+        timestamp: Date.now(), // ДОБАВИТЬ ЭТУ СТРОКУ
+        username: userData.username || null,
+        first_name: userData.first_name || null,
+        last_name: userData.last_name || null,
+        photo_url: userData.photo_url || null
+      };
+    } else {
+      rouletteBets[userId].gifts = [...(rouletteBets[userId].gifts || []), giftSlug];
+      rouletteBets[userId].totalValue = (rouletteBets[userId].totalValue || rouletteBets[userId].amount) + floorPrice;
+      // timestamp НЕ обновляется
+    }
+
+    currentRouletteRound.totalBet = Object.values(rouletteBets).reduce((s, b) => s + (b.totalValue || b.amount), 0);
+    const betsArray = sortBetsByTimestamp(Object.values(rouletteBets));
+
+    const isFirstBet = Object.keys(rouletteBets).length === 1;
+    if (isFirstBet && currentRouletteRound.status === "waiting") {
+      currentRouletteRound.status = "waitingForPlayers";
+      let countdown = 60;
+      currentRouletteRound.countdown = countdown;
+      currentRouletteRound.countdownType = "waiting";
+
+      broadcastToRoulette({
+        type: "status",
+        status: "waitingForPlayers",
+        countdown,
+        countdownType: "waiting",
+        message: "Ожидание второго игрока...",
+        bets: betsArray,
+        totalBet: currentRouletteRound.totalBet
+      });
+
+      if (rouletteWaitingTimer) clearTimeout(rouletteWaitingTimer);
+      if (rouletteWaitingInterval) clearInterval(rouletteWaitingInterval);
+
+      rouletteWaitingInterval = setInterval(() => {
+        countdown--;
+        currentRouletteRound.countdown = countdown;
+        broadcastToRoulette({
+          type: "countdown",
+          countdown,
+          countdownType: "waiting"
+        });
+
+        if (countdown <= 0) {
+          clearInterval(rouletteWaitingInterval);
+          rouletteWaitingInterval = null;
+        }
+      }, 1000);
+
+      rouletteWaitingTimer = setTimeout(() => {
+        if (rouletteWaitingInterval) {
+          clearInterval(rouletteWaitingInterval);
+          rouletteWaitingInterval = null;
+        }
+
+        if (Object.keys(rouletteBets).length === 1) {
+          const loneBet = rouletteBets[userId];
+          dbConn.run("UPDATE users SET balance = balance + ? WHERE id = ?", [loneBet.amount, loneBet.userId], (err) => {
+            if (err) {
+              console.error("Failed to refund balance:", err);
+              return;
+            }
+            dbConn.run("UPDATE users SET balance = balance - ? WHERE id = 1", [loneBet.amount], (err) => {
+              if (err) {
+                console.error("Failed to deduct balance from casino:", err);
+                return;
+              }
+              // Возвращаем все подарки из loneBet.gifts
+              if (loneBet.gifts && loneBet.gifts.length > 0) {
+                const placeholders = loneBet.gifts.map(() => '?').join(',');
+                dbConn.run(`UPDATE gifts SET user_id = ? WHERE slug IN (${placeholders})`, [userId, ...loneBet.gifts], (err) => {
+                  if (err) {
+                    console.error("Failed to refund gifts:", err);
+                    return;
+                  }
+                  dbConn.get("SELECT gifts FROM users WHERE id = ?", [userId], (err, row) => {
+                    if (err) {
+                      console.error("Failed to get user gifts:", err);
+                      return;
+                    }
+                    const userGifts = JSON.parse(row.gifts || "[]");
+                    userGifts.push(...loneBet.gifts);
+                    dbConn.run("UPDATE users SET gifts = ? WHERE id = ?", [JSON.stringify(userGifts), userId], (err) => {
+                      if (err) {
+                        console.error("Failed to update user gifts:", err);
+                        return;
+                      }
+                      dbConn.get("SELECT gifts FROM users WHERE id = 1", (err, casinoRow) => {
+                        if (err) {
+                          console.error("Failed to get casino gifts:", err);
+                          return;
+                        }
+                        const casinoGifts = JSON.parse(casinoRow.gifts || "[]");
+                        const updatedCasinoGifts = casinoGifts.filter(g => !loneBet.gifts.includes(g));
+                        dbConn.run("UPDATE users SET gifts = ? WHERE id = 1", [JSON.stringify(updatedCasinoGifts)], (err) => {
+                          if (err) {
+                            console.error("Failed to update casino gifts:", err);
+                            return;
+                          }
+                          broadcastToRoulette({
+                            type: "status",
+                            status: "waiting",
+                            countdown: null,
+                            countdownType: null,
+                            message: "Раунд отменен, ставка возвращена"
+                          });
+                          resetRouletteRound();
+                        });
+                      });
+                    });
+                  });
+                });
+              } else {
+                // Если подарков нет, просто возвращаем баланс
+                broadcastToRoulette({
+                  type: "status",
+                  status: "waiting",
+                  countdown: null,
+                  countdownType: null,
+                  message: "Раунд отменен, ставка возвращена"
+                });
+                resetRouletteRound();
+              }
+            });
+          });
+        }
+      }, 60000);
+    } else if (currentRouletteRound.status === "waitingForPlayers" && Object.keys(rouletteBets).length >= 2) {
+      if (rouletteWaitingTimer) clearTimeout(rouletteWaitingTimer);
+      if (rouletteWaitingInterval) clearInterval(rouletteWaitingInterval);
+      startRouletteBettingCountdown();
+    }
+
+    broadcastToRoulette({
+      type: "bet",
+      bet: rouletteBets[userId],
+      bets: betsArray,
+      totalBet: currentRouletteRound.totalBet
+    });
+
+    dbPool.releaseConnection(dbConn);
+    res.json({ success: true });
+
+  } catch (error) {
+    console.error("Failed to add gift:", error);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+// APP
+
 app.post("/webapp/validate", (req, res) => {
   let { initData, userData } = req.body;
 
@@ -668,7 +1355,6 @@ app.post("/webapp/validate", (req, res) => {
     return res.status(400).json({ ok: false, error: "no initData provided" });
   }
 
-  // Санитизация данных
   initData = sanitizeInput(initData);
   if (userData) {
     userData.first_name = sanitizeInput(userData.first_name);
@@ -678,11 +1364,9 @@ app.post("/webapp/validate", (req, res) => {
 
   console.log("🔍 Validating initData:", initData.substring(0, 100) + "...");
 
-  // Development mode without BOT_TOKEN
   if (!BOT_TOKEN) {
     console.warn("⚠️ Skipping signature validation - no BOT_TOKEN (development mode)");
 
-    // Use userData if provided, otherwise parse from initData
     if (userData && userData.id) {
       updateOrCreateUser(userData).then(() => {
         return res.json({ ok: true, user: userData });
@@ -883,7 +1567,6 @@ app.get("/api/user/:id", (req, res) => {
   });
 });
 
-// Эндпоинт для получения подарков пользователя
 app.get("/api/user/:id/gifts", (req, res) => {
   const { id } = req.params;
 
@@ -907,217 +1590,11 @@ app.get("/api/user/:id/gifts", (req, res) => {
   });
 });
 
-app.post("/api/crash/bet", (req, res) => {
-  const { userId, amount } = req.body;
-
-  if (!currentCrashRound || currentCrashRound.status !== "betting")
-    return res.status(400).json({ error: "Ставки сейчас не принимаются" });
-  if (!userId || !amount || amount < 0.01)
-    return res.status(400).json({ error: "Минимальная ставка 0.01 TON" });
-
-  db.get("SELECT * FROM users WHERE id = ?", [userId], (err, user) => {
-    if (err) return res.status(500).json({ error: "DB error" });
-    if (!user) return res.status(404).json({ error: "User not found" });
-    if (user.balance < amount) return res.status(400).json({ error: "Недостаточно средств" });
-
-    db.run("UPDATE users SET balance = balance - ? WHERE id = ?", [amount, userId], function (err2) {
-      if (err2) return res.status(500).json({ error: "DB error" });
-      db.run("UPDATE users SET balance = balance + ? WHERE id = 0", [amount], function () {
-
-        db.get("SELECT username, first_name, last_name, photo_url FROM users WHERE id = ?", [userId], (err, userData) => {
-          const betData = {
-            userId: Number(userId),
-            amount: Number(amount),
-            status: "ongoing",
-            win: null,
-            username: userData?.username || null,
-            first_name: userData?.first_name || null,
-            last_name: userData?.last_name || null,
-            photo_url: userData?.photo_url || null
-          };
-
-          crashBets[userId] = betData;
-          broadcastToCrash({ type: "bet", bet: betData, bets: Object.values(crashBets) });
-          return res.json({ success: true });
-        });
-      });
-    });
-  });
-});
-
-app.post("/api/crash/cashout", (req, res) => {
-  const { userId, multiplier } = req.body;
-  if (!currentCrashRound || currentCrashRound.status !== "running") return res.status(400).json({ error: "Раунд не активен" });
-  if (!crashBets[userId] || crashBets[userId].status !== "ongoing") return res.status(400).json({ error: "Нет активной ставки" });
-  if (cashoutLocks[userId]) return res.status(400).json({ error: "Запрос уже обрабатывается" });
-
-  cashoutLocks[userId] = true;  // Устанавливаем блокировку сразу после проверок
-
-  const win = +(crashBets[userId].amount * multiplier).toFixed(2);
-  db.run("UPDATE users SET balance = balance - ? WHERE id = 0", [win], function (err) {
-    if (err) {
-      cashoutLocks[userId] = false;  // Снимаем блокировку при ошибке
-      return res.status(500).json({ error: "DB error" });
-    }
-    db.run("UPDATE users SET balance = balance + ? WHERE id = ?", [win, userId], function (err2) {
-      if (err2) {
-        cashoutLocks[userId] = false;  // Снимаем блокировку при ошибке
-        return res.status(500).json({ error: "DB error" });
-      }
-      crashBets[userId].status = "cashed";
-      crashBets[userId].win = win;
-      crashBets[userId].cashoutMultiplier = multiplier;  // Сохраняем множитель для лога раунда
-      broadcastToCrash({ type: "cashout", userId: Number(userId), win, bets: Object.values(crashBets) });
-      cashoutLocks[userId] = false;  // Снимаем блокировку после успешной обработки
-      return res.json({ success: true, win });
-    });
-  });
-});
-
-app.post("/api/roulette/bet", (req, res) => {
-  const { userId, amount } = req.body;
-
-  const betAmount = Number(amount);
-  if (!userId || isNaN(betAmount) || betAmount < 0.01) {
-    return res.status(400).json({ error: "Минимальная ставка 0.01 TON" });
-  }
-
-  if (currentRouletteRound && currentRouletteRound.status === "running") {
-    return res.status(400).json({ error: "Ставки больше не принимаются" });
-  }
-
-  db.get("SELECT * FROM users WHERE id = ?", [userId], (err, user) => {
-    if (err) {
-      return res.status(500).json({ error: "Ошибка базы данных" });
-    }
-    if (!user) {
-      return res.status(404).json({ error: "Пользователь не найден" });
-    }
-
-    if (user.balance < betAmount) {
-      return res.status(400).json({ error: "Недостаточно средств." });
-    }
-
-    const isFirstBet = Object.keys(rouletteBets).length === 0;
-
-    db.run("UPDATE users SET balance = balance - ? WHERE id = ?", [betAmount, userId], function (err2) {
-      if (err2) {
-        return res.status(500).json({ error: "Ошибка при списании средств" });
-      }
-      db.run("UPDATE users SET balance = balance + ? WHERE id = 1", [betAmount], function () {
-
-        db.get("SELECT username, first_name, last_name, photo_url FROM users WHERE id = ?", [userId], (err, userData) => {
-          if (!rouletteBets[userId]) {
-            rouletteBets[userId] = {
-              userId: Number(userId),
-              amount: betAmount,
-              win: null,
-              username: userData?.username || null,
-              first_name: userData?.first_name || null,
-              last_name: userData?.last_name || null,
-              photo_url: userData?.photo_url || null
-            };
-          } else {
-            rouletteBets[userId].amount += betAmount;
-          }
-
-          currentRouletteRound.totalBet = Object.values(rouletteBets).reduce((s, b) => s + b.amount, 0);
-          const betsArray = Object.values(rouletteBets).slice().sort((a, b) => b.amount - a.amount);
-
-          if (isFirstBet) {
-            // Первый игрок - запускаем таймер ожидания 60 секунд
-            currentRouletteRound.status = "waitingForPlayers";
-            let countdown = 60;
-            currentRouletteRound.countdown = countdown;
-            currentRouletteRound.countdownType = "waiting";
-
-            broadcastToRoulette({
-              type: "status",
-              status: "waitingForPlayers",
-              countdown,
-              countdownType: "waiting",
-              message: "Ожидание второго игрока...",
-              bets: betsArray
-            });
-
-            // Очищаем предыдущие таймеры
-            if (rouletteWaitingTimer) clearTimeout(rouletteWaitingTimer);
-            if (rouletteWaitingInterval) clearInterval(rouletteWaitingInterval);
-
-            rouletteWaitingInterval = setInterval(() => {
-              countdown--;
-              currentRouletteRound.countdown = countdown;
-              broadcastToRoulette({
-                type: "countdown",
-                countdown,
-                countdownType: "waiting"
-              });
-
-              if (countdown <= 0) {
-                clearInterval(rouletteWaitingInterval);
-                rouletteWaitingInterval = null;
-              }
-            }, 1000);
-
-            rouletteWaitingTimer = setTimeout(() => {
-              if (rouletteWaitingInterval) {
-                clearInterval(rouletteWaitingInterval);
-                rouletteWaitingInterval = null;
-              }
-
-              if (Object.keys(rouletteBets).length === 1) {
-                const loneBet = rouletteBets[userId];
-                db.run("UPDATE users SET balance = balance + ? WHERE id = ?", [loneBet.amount, loneBet.userId], (err) => {
-                  db.run("UPDATE users SET balance = balance - ? WHERE id = 1", [loneBet.amount], () => {
-                    broadcastToRoulette({
-                      type: "status",
-                      status: "waiting",
-                      countdown: null,
-                      countdownType: null,
-                      message: "Раунд отменен, ставка возвращена"
-                    });
-                    resetRouletteRound();
-                  });
-                });
-              }
-            }, 60000);
-
-          } else if (currentRouletteRound.status === "waitingForPlayers" && Object.keys(rouletteBets).length >= 2) {
-            // Второй игрок присоединился - полностью останавливаем таймер ожидания и запускаем таймер ставок
-            if (rouletteWaitingTimer) {
-              clearTimeout(rouletteWaitingTimer);
-              rouletteWaitingTimer = null;
-            }
-            if (rouletteWaitingInterval) {
-              clearInterval(rouletteWaitingInterval);
-              rouletteWaitingInterval = null;
-            }
-
-            // Полностью убираем таймер ожидания и запускаем таймер ставок 20 секунд
-            startRouletteBettingCountdown();
-          }
-
-          broadcastToRoulette({
-            type: "bet",
-            bet: rouletteBets[userId],
-            bets: betsArray,
-            totalBet: currentRouletteRound.totalBet,
-          });
-
-          return res.json({ success: true });
-        });
-      });
-    });
-  });
-});
-
-// Endpoint для обработки депозитов
 app.post("/api/user/deposit", async (req, res) => {
   console.log('💰 Received deposit request:', req.body);
 
   let { userId, amount, transactionHash } = req.body;
 
-  // Санитизация входных данных
   userId = parseInt(userId);
   amount = parseFloat(amount);
   transactionHash = sanitizeInput(transactionHash);
@@ -1128,14 +1605,12 @@ app.post("/api/user/deposit", async (req, res) => {
   }
 
   try {
-    // Проверка на дублирование транзакции
     const isDuplicate = await isDuplicateTransaction(transactionHash);
     if (isDuplicate) {
       console.log(`⚠️ Duplicate transaction detected: ${transactionHash}`);
       return res.status(400).json({ error: "Transaction already processed" });
     }
 
-    // Логируем транзакцию
     const transactionId = await logTransaction(userId, 'deposit', amount, 0, transactionHash, null, 'pending');
 
     console.log(`💰 Processing deposit: User ${userId}, Amount ${amount} TON, TX: ${transactionHash}`);
@@ -1147,7 +1622,6 @@ app.post("/api/user/deposit", async (req, res) => {
         return res.status(500).json({ error: "Database error: " + err.message });
       }
 
-      // Обновляем статус транзакции
       await updateTransactionStatus(transactionId, 'completed');
 
       console.log(`✅ User ${userId} deposited ${amount} TON`);
@@ -1175,190 +1649,6 @@ app.post("/api/user/deposit", async (req, res) => {
   }
 });
 
-function generateCrashRound(immediateCrashDivisor, houseEdge) {
-  if (immediateCrashDivisor && Math.floor(Math.random() * immediateCrashDivisor) === 0) {
-    return 1.0;
-  }
-
-  /*const r = Math.random();
-  let crashPoint = 1.0 / (1.0 - r);
-  crashPoint *= (1 - houseEdge);
-  crashPoint = Math.min(crashPoint, 100);
-  return Math.max(1.0, +crashPoint.toFixed(2)); */
-
-  const x = Math.floor(Math.random() * 1000000);
-  let crashPoint = (1000000 / (x + 1)) * (1 - houseEdge);
-  crashPoint = Math.max(1.0, Math.min(100.0, crashPoint));
-  return +crashPoint.toFixed(2);
-
-}
-
-function startCrashLoop() {
-  const runRound = () => {
-    crashBets = {};
-    roundNumber++;
-    if (!inStreak && roundNumber >= nextStreakTrigger) {
-      inStreak = true;
-      streakRoundsLeft = 10;
-      nextStreakTrigger = roundNumber + Math.floor(Math.random() * 101) + 100;
-    }
-    currentCrashRound = { status: "betting", countdown: 5 };
-
-    const enrichBetsAndBroadcast = () => {
-      Promise.all(Object.values(crashBets).map(bet =>
-        new Promise(resolve => {
-          db.get("SELECT username, first_name, last_name, photo_url FROM users WHERE id = ?", [bet.userId], (err, user) => {
-            resolve({
-              ...bet,
-              username: user?.username || null,
-              first_name: user?.first_name || null,
-              last_name: user?.last_name || null,
-              photo_url: user?.photo_url || null
-            });
-          });
-        })
-      )).then(enrichedBets => {
-        broadcastToCrash({
-          type: "status",
-          status: "betting",
-          countdown: 5,
-          bets: enrichedBets,
-          history: crashHistory
-        });
-      });
-    };
-
-    enrichBetsAndBroadcast();
-
-    let countdown = 5;
-    const countdownInterval = setInterval(() => {
-      countdown--;
-      currentCrashRound.countdown = countdown;
-      broadcastToCrash({ type: "countdown", countdown });
-      if (countdown <= 0) {
-        clearInterval(countdownInterval);
-      }
-    }, 1000);
-
-    setTimeout(() => {
-      let crashAt;
-      if (inStreak) {
-        const lowMult = 1.0 + Math.random() * 0.8;
-        crashAt = Math.max(1.0, +(lowMult * (1 - parseFloat(process.env.HOUSEEDGE))).toFixed(2));
-        streakRoundsLeft--;
-        if (streakRoundsLeft <= 0) {
-          inStreak = false;
-        }
-      } else {
-        crashAt = generateCrashRound(parseFloat(process.env.IMMEDIATECRASHDIVISOR), parseFloat(process.env.HOUSEEDGE));
-      }
-      currentCrashRound = { status: "running", crashAt, multiplier: 1.0 };
-
-      Promise.all(Object.values(crashBets).map(bet =>
-        new Promise(resolve => {
-          db.get("SELECT username, first_name, last_name, photo_url FROM users WHERE id = ?", [bet.userId], (err, user) => {
-            resolve({
-              ...bet,
-              username: user?.username || null,
-              first_name: user?.first_name || null,
-              last_name: user?.last_name || null,
-              photo_url: user?.photo_url || null
-            });
-          });
-        })
-      )).then(enrichedBets => {
-        broadcastToCrash({
-          type: "status",
-          status: "running",
-          bets: enrichedBets,
-          history: crashHistory
-        });
-      });
-
-      let multiplier = 1.0;
-      const gameInterval = setInterval(() => {
-        multiplier = +(multiplier * 1.05).toFixed(2);
-        currentCrashRound.multiplier = multiplier;
-
-        Promise.all(Object.values(crashBets).map(bet =>
-          new Promise(resolve => {
-            db.get("SELECT username, first_name, last_name, photo_url FROM users WHERE id = ?", [bet.userId], (err, user) => {
-              resolve({
-                ...bet,
-                username: user?.username || null,
-                first_name: user?.first_name || null,
-                last_name: user?.last_name || null,
-                photo_url: user?.photo_url || null
-              });
-            });
-          })
-        )).then(enrichedBets => {
-          broadcastToCrash({ type: "tick", multiplier, bets: enrichedBets });
-        });
-
-        if (multiplier >= crashAt) {
-          clearInterval(gameInterval);
-          currentCrashRound.status = "crashed";
-
-          for (const uid in crashBets) {
-            if (crashBets[uid].status === "ongoing") {
-              crashBets[uid].status = "lost";
-              crashBets[uid].win = 0;
-            }
-          }
-
-          crashHistory.unshift(crashAt);
-          if (crashHistory.length > 100) {
-            crashHistory = crashHistory.slice(0, 100);
-          }
-
-          // Логируем раунд в файл только если были игроки
-          if (Object.values(crashBets).length > 0) {
-            const endTime = new Date().toISOString();
-            const roundLog = {
-              timestamp: endTime,
-              roundNumber,
-              bets: Object.values(crashBets).map(b => ({
-                userId: b.userId,
-                amount: b.amount,
-                multiplier: b.cashoutMultiplier || 0  // 0 для lost/crashed, реальный для cashed
-              }))
-            };
-            fs.appendFile('./crash_logs.jsonl', JSON.stringify(roundLog) + '\n').catch(err => {
-              console.error('Failed to log crash round:', err);
-            });
-          }
-
-          Promise.all(Object.values(crashBets).map(bet =>
-            new Promise(resolve => {
-              db.get("SELECT username, first_name, last_name, photo_url FROM users WHERE id = ?", [bet.userId], (err, user) => {
-                resolve({
-                  ...bet,
-                  username: user?.username || null,
-                  first_name: user?.first_name || null,
-                  last_name: user?.last_name || null,
-                  photo_url: user?.photo_url || null
-                });
-              });
-            })
-          )).then(enrichedBets => {
-            broadcastToCrash({
-              type: "crash",
-              crashAt,
-              bets: enrichedBets,
-              history: crashHistory
-            });
-          });
-
-          setTimeout(runRound, 5000);
-        }
-      }, 500);
-    }, 5000);
-  };
-  runRound();
-}
-
-// Endpoint для получения адреса кошелька казино
 app.get("/api/casino/wallet", async (req, res) => {
   try {
     const address = tonService.getWalletAddress();
@@ -1372,7 +1662,6 @@ app.get("/api/casino/wallet", async (req, res) => {
   }
 });
 
-// Endpoint для отправки уведомления о начале вывода
 app.post("/api/user/withdraw-start", async (req, res) => {
   const { userId, amount, walletAddress } = req.body;
 
@@ -1384,24 +1673,22 @@ app.post("/api/user/withdraw-start", async (req, res) => {
     );
     res.json({ success: true });
   } catch (error) {
-    console.error('❌ Failed to send start notification:', error);
+    console.error('Failed to send start notification:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// Endpoint для обработки выводов
 app.post("/api/user/withdraw", async (req, res) => {
-  console.log('💸 Received withdrawal request:', req.body);
+  console.log('Received withdrawal request:', req.body);
 
   let { userId, amount, walletAddress } = req.body;
 
-  // Санитизация входных данных
   userId = parseInt(userId);
   amount = parseFloat(amount);
   walletAddress = sanitizeInput(walletAddress);
 
   if (!userId || !amount || amount <= 0 || !walletAddress) {
-    console.log('❌ Invalid withdrawal data:', { userId, amount, walletAddress });
+    console.log('Invalid withdrawal data:', { userId, amount, walletAddress });
     return res.status(400).json({ error: "Invalid withdrawal data" });
   }
 
@@ -1416,24 +1703,20 @@ app.post("/api/user/withdraw", async (req, res) => {
   }
 
   try {
-    // Генерируем уникальный ID для транзакции вывода
     const withdrawalHash = `withdrawal_${userId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-    // Логируем транзакцию
     const transactionId = await logTransaction(userId, 'withdrawal', withdrawalAmount, withdrawalFee, withdrawalHash, walletAddress, 'pending');
 
-    console.log(`💸 Processing withdrawal: User ${userId}, Amount ${withdrawalAmount} TON, Fee ${withdrawalFee} TON, To: ${walletAddress}`);
+    console.log(`Processing withdrawal: User ${userId}, Amount ${withdrawalAmount} TON, Fee ${withdrawalFee} TON, To: ${walletAddress}`);
 
-    // Отправляем уведомление о начале обработки
     try {
       await telegramBot.sendWithdrawalStartNotification(userId, withdrawalAmount, walletAddress);
     } catch (telegramError) {
-      console.error('❌ Failed to send start notification:', telegramError);
+      console.error('Failed to send start notification:', telegramError);
     }
 
     db.get("SELECT * FROM users WHERE id = ?", [userId], async (err, user) => {
       if (err) {
-        console.error("❌ Failed to get user:", err);
+        console.error("Failed to get user:", err);
         await updateTransactionStatus(transactionId, 'failed');
         return res.status(500).json({ error: "Database error: " + err.message });
       }
@@ -1452,18 +1735,16 @@ app.post("/api/user/withdraw", async (req, res) => {
         });
       }
 
-      // Списываем средства с баланса пользователя
       db.run("UPDATE users SET balance = balance - ? WHERE id = ?", [totalCost, userId], async function (err2) {
         if (err2) {
-          console.error("❌ Failed to update balance:", err2);
+          console.error("Failed to update balance:", err2);
           await updateTransactionStatus(transactionId, 'failed');
           return res.status(500).json({ error: "Database error: " + err2.message });
         }
 
-        console.log(`✅ User balance updated, starting TON transaction...`);
+        console.log(`User balance updated, starting TON transaction...`);
 
         try {
-          // Выполняем реальную транзакцию в сети TON
           const tonResult = await tonService.sendTransaction(
             walletAddress,
             withdrawalAmount,
@@ -1471,17 +1752,15 @@ app.post("/api/user/withdraw", async (req, res) => {
           );
 
           if (tonResult.success) {
-            // Используем реальный hash если есть, иначе временный
             const finalTransactionHash = tonResult.realHash || tonResult.hash || tonResult.transactionId || withdrawalHash;
 
-            console.log('💾 Сохраняем hash в базу:', {
+            console.log('Saving hash to database:', {
               realHash: tonResult.realHash,
               tempHash: tonResult.tempHash,
               finalHash: finalTransactionHash,
               hasRealHash: !!tonResult.realHash
             });
 
-            // Обновляем статус транзакции с финальным хешем
             try {
               await new Promise((resolve, reject) => {
                 db.run("UPDATE transactions SET transaction_hash = ?, status = ? WHERE id = ?",
@@ -1490,26 +1769,23 @@ app.post("/api/user/withdraw", async (req, res) => {
                     else resolve();
                   });
               });
-              console.log(`✅ Transaction ${transactionId} updated with hash: ${finalTransactionHash}`);
+              console.log(`Transaction ${transactionId} updated with hash: ${finalTransactionHash}`);
             } catch (dbError) {
-              console.error('❌ Failed to update transaction hash:', dbError);
-              // Если не удалось обновить hash, все равно продолжаем
+              console.error('Failed to update transaction hash:', dbError);
             }
 
-            console.log(`✅ TON transaction successful: ${finalTransactionHash}`);
+            console.log(`TON transaction successful: ${finalTransactionHash}`);
 
-            // Отправляем уведомление в Telegram
             try {
               await telegramBot.sendWithdrawalNotification(
                 userId,
                 withdrawalAmount,
-                finalTransactionHash,  // <- исправлено
+                finalTransactionHash,
                 walletAddress
               );
-              console.log('📱 Telegram notification sent');
+              console.log('Telegram notification sent');
             } catch (telegramError) {
-              console.error('❌ Failed to send Telegram notification:', telegramError);
-              // Отправляем уведомление об ошибке отправки уведомления
+              console.error('Failed to send Telegram notification:', telegramError);
               try {
                 await telegramBot.sendErrorNotification(
                   userId,
@@ -1518,14 +1794,13 @@ app.post("/api/user/withdraw", async (req, res) => {
                   { timestamp: Math.floor(Date.now() / 1000), transactionId, userId, amount: withdrawalAmount }
                 );
               } catch (secondaryError) {
-                console.error('❌ Failed to send error notification:', secondaryError);
+                console.error('Failed to send error notification:', secondaryError);
               }
             }
 
-            // Возвращаем успешный результат
             db.get("SELECT * FROM users WHERE id = ?", [userId], (err, updatedUser) => {
               if (err || !updatedUser) {
-                console.error("❌ Failed to fetch updated user:", err);
+                console.error("Failed to fetch updated user:", err);
                 return res.status(500).json({ error: "Failed to fetch updated user" });
               }
 
@@ -1535,7 +1810,7 @@ app.post("/api/user/withdraw", async (req, res) => {
                 updatedUser.gifts = [];
               }
 
-              console.log(`✅ Withdrawal completed successfully`);
+              console.log(`Withdrawal completed successfully`);
               res.json({
                 success: true,
                 user: updatedUser,
@@ -1549,12 +1824,10 @@ app.post("/api/user/withdraw", async (req, res) => {
             });
 
           } else {
-            // Транзакция TON не удалась - НЕ возвращаем средства пользователю
-            console.error(`❌ TON transaction failed: ${tonResult.error}`);
+            console.error(`TON transaction failed: ${tonResult.error}`);
 
             await updateTransactionStatus(transactionId, 'failed');
 
-            // Отправляем уведомление об ошибке
             try {
               await telegramBot.sendErrorNotification(
                 userId,
@@ -1571,7 +1844,7 @@ app.post("/api/user/withdraw", async (req, res) => {
                 }
               );
             } catch (telegramError) {
-              console.error('❌ Failed to send error notification:', telegramError);
+              console.error('Failed to send error notification:', telegramError);
             }
 
             return res.status(500).json({
@@ -1581,12 +1854,10 @@ app.post("/api/user/withdraw", async (req, res) => {
           }
 
         } catch (tonError) {
-          console.error("❌ TON Service error:", tonError);
+          console.error("TON Service error:", tonError);
 
-          // НЕ возвращаем средства пользователю при ошибке TON
           await updateTransactionStatus(transactionId, 'failed');
 
-          // Отправляем уведомление об ошибке
           try {
             await telegramBot.sendErrorNotification(
               userId,
@@ -1604,7 +1875,7 @@ app.post("/api/user/withdraw", async (req, res) => {
               }
             );
           } catch (telegramError) {
-            console.error('❌ Failed to send error notification:', telegramError);
+            console.error('Failed to send error notification:', telegramError);
           }
 
           return res.status(500).json({
@@ -1616,12 +1887,11 @@ app.post("/api/user/withdraw", async (req, res) => {
     });
 
   } catch (error) {
-    console.error("❌ Withdrawal processing error:", error);
+    console.error("Withdrawal processing error:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// Добавляем новый endpoint для получения истории транзакций пользователя
 app.get("/api/user/:id/transactions", async (req, res) => {
   const { id } = req.params;
   const { limit = 50, offset = 0 } = req.query;
@@ -1630,11 +1900,11 @@ app.get("/api/user/:id/transactions", async (req, res) => {
     return res.status(400).json({ error: "Invalid user ID" });
   }
 
-  const db = await dbPool.getConnection();
+  const dbConn = await dbPool.getConnection();
 
   try {
     const transactions = await new Promise((resolve, reject) => {
-      db.all(`
+      dbConn.all(`
         SELECT id, type, amount, fee, status, created_at, completed_at, wallet_address
         FROM transactions 
         WHERE user_id = ? 
@@ -1646,9 +1916,8 @@ app.get("/api/user/:id/transactions", async (req, res) => {
       });
     });
 
-    // Подсчет общего количества транзакций
     const total = await new Promise((resolve, reject) => {
-      db.get("SELECT COUNT(*) as count FROM transactions WHERE user_id = ?", [parseInt(id)], (err, row) => {
+      dbConn.get("SELECT COUNT(*) as count FROM transactions WHERE user_id = ?", [parseInt(id)], (err, row) => {
         if (err) reject(err);
         else resolve(row.count);
       });
@@ -1665,11 +1934,10 @@ app.get("/api/user/:id/transactions", async (req, res) => {
     console.error("Failed to get transactions:", error);
     res.status(500).json({ error: "Database error" });
   } finally {
-    dbPool.releaseConnection(db);
+    dbPool.releaseConnection(dbConn);
   }
 });
 
-// API для обновления floor цен подарков (от парсера Tonnel)
 app.post("/tonnel", async (req, res) => {
   const { timestamp, items } = req.body;
 
@@ -1677,18 +1945,17 @@ app.post("/tonnel", async (req, res) => {
     return res.status(400).json({ error: "Invalid items data" });
   }
 
-  console.log(`📦 Received ${items.length} gift floor prices from Tonnel parser`);
+  console.log(`Received ${items.length} gift floor prices from Tonnel parser`);
 
   try {
-    const db = await dbPool.getConnection();
+    const dbConn = await dbPool.getConnection();
 
-    // Обновляем/вставляем floor цены для каждого подарка
     const updatePromises = items.map(item => {
       return new Promise((resolve, reject) => {
         const floor = parseFloat(item.num.replace(',', '.')) || 0;
         const id = item.name.replace(/[^a-zA-Z]/g, "").toLowerCase();
 
-        db.run(`
+        dbConn.run(`
           INSERT OR REPLACE INTO gift_collections (id, name, floor) 
           VALUES (?, ?, ?)
         `, [id, item.name, floor], (err) => {
@@ -1703,30 +1970,28 @@ app.post("/tonnel", async (req, res) => {
     });
 
     await Promise.all(updatePromises);
-    dbPool.releaseConnection(db);
+    dbPool.releaseConnection(dbConn);
 
-    console.log(`✅ Updated ${items.length} gift floor prices`);
+    console.log(`Updated ${items.length} gift floor prices`);
     res.json({ success: true, updated: items.length });
 
   } catch (error) {
-    console.error("❌ Failed to update gift floor prices:", error);
+    console.error("Failed to update gift floor prices:", error);
     res.status(500).json({ error: "Database error" });
   }
 });
 
-// Эндпоинт для получения floor цен коллекций
 app.post("/api/gifts/floor", async (req, res) => {
   const { collections } = req.body;
   if (!collections || !Array.isArray(collections)) {
     return res.status(400).json({ error: "Collections array required" });
   }
   try {
-    const db = await dbPool.getConnection();
+    const dbConn = await dbPool.getConnection();
     const floorPrices = {};
     const promises = collections.map(collection => {
       return new Promise((resolve) => {
-        // Ищем по столбцу id
-        db.get("SELECT floor FROM gift_collections WHERE id = ?", [collection], (err, row) => {
+        dbConn.get("SELECT floor FROM gift_collections WHERE id = ?", [collection], (err, row) => {
           if (err || !row) {
             floorPrices[collection] = '0';
           } else {
@@ -1737,7 +2002,7 @@ app.post("/api/gifts/floor", async (req, res) => {
       });
     });
     await Promise.all(promises);
-    dbPool.releaseConnection(db);
+    dbPool.releaseConnection(dbConn);
     res.json(floorPrices);
   } catch (error) {
     console.error("Failed to get floor prices:", error);
@@ -1745,21 +2010,18 @@ app.post("/api/gifts/floor", async (req, res) => {
   }
 });
 
-// Эндпоинт для получения имен коллекций
 app.post("/api/gifts/names", async (req, res) => {
   const { collections } = req.body;
   if (!collections || !Array.isArray(collections)) {
     return res.status(400).json({ error: "Collections array required" });
   }
   try {
-    const db = await dbPool.getConnection();
+    const dbConn = await dbPool.getConnection();
     const giftNames = {};
     const promises = collections.map(collection => {
       return new Promise((resolve) => {
-        // Ищем по столбцу id
-        db.get("SELECT name FROM gift_collections WHERE id = ?", [collection], (err, row) => {
+        dbConn.get("SELECT name FROM gift_collections WHERE id = ?", [collection], (err, row) => {
           if (err || !row) {
-            // Если не найдено в БД, генерируем fallback имя
             giftNames[collection] = collection.charAt(0).toUpperCase() + collection.slice(1).replace(/([A-Z])/g, ' $1');
           } else {
             giftNames[collection] = row.name;
@@ -1769,7 +2031,7 @@ app.post("/api/gifts/names", async (req, res) => {
       });
     });
     await Promise.all(promises);
-    dbPool.releaseConnection(db);
+    dbPool.releaseConnection(dbConn);
     res.json(giftNames);
   } catch (error) {
     console.error("Failed to get gift names:", error);
@@ -1781,61 +2043,82 @@ app.post("/api/gifts/dep", async (req, res) => {
   const data = req.body;
   const lowerSlug = data.slug.toLowerCase();
   try {
-    const db = await dbPool.getConnection();
+    const dbConn = await dbPool.getConnection();
     await new Promise((resolve, reject) => {
-      db.run(`
+      dbConn.run(`
         INSERT OR REPLACE INTO gifts(slug, user_id, gift_unique_id, gift_id, title, num, model, model_rarity_permille, pattern, pattern_rarity_permille, backdrop, backdrop_rarity_permille, owner_id, resell_amount, can_export_at, transfer_stars)
         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [lowerSlug, data.user_id, data.id, data.gift_id, data.title, data.num,
+      `, [lowerSlug, parseInt(data.user_id), data.id, data.gift_id, data.title, data.num,
         data.model, data.model_rarity_permille, data.pattern, data.pattern_rarity_permille,
-        data.backdrop, data.backdrop_rarity_permille, data.owner_id, JSON.stringify(data.resell_amount),
+        data.backdrop, data.backdrop_rarity_permille, parseInt(data.owner_id), JSON.stringify(data.resell_amount),
         data.can_export_at, data.transfer_stars
       ], (err) => {
         if (err) {
           console.error("Failed to insert gift:", err);
           reject(err);
         } else {
-          console.log(`✅ Gift inserted: ${lowerSlug} for user ${data.user_id}`);
-          resolve();
+          console.log(`Gift inserted: ${lowerSlug} for user ${data.user_id}`);
+          dbConn.get("SELECT gifts FROM users WHERE id = ?", [data.user_id], (err2, row) => {
+            if (err2) {
+              console.error("Failed to get user gifts:", err2);
+              reject(err2);
+              return;
+            }
+            let currentGifts = JSON.parse(row ? row.gifts : "[]");
+            if (!currentGifts.includes(lowerSlug)) {
+              currentGifts.push(lowerSlug);
+              dbConn.run("UPDATE users SET gifts = ? WHERE id = ?",
+                [JSON.stringify(currentGifts), data.user_id],
+                (err3) => {
+                  if (err3) {
+                    console.error("Failed to update user gifts:", err3);
+                    reject(err3);
+                  } else {
+                    console.log(`Added ${lowerSlug} to user ${data.user_id} gifts list`);
+                    resolve();
+                  }
+                }
+              );
+            } else {
+              console.log(`Gift ${lowerSlug} already in user ${data.user_id} gifts list`);
+              resolve();
+            }
+          });
         }
       });
     });
-    dbPool.releaseConnection(db);
-    // Send notification
+    dbPool.releaseConnection(dbConn);
     await telegramBot.sendGiftDepositNotification(data.user_id, data.title, lowerSlug);
     res.json({ success: true });
   } catch (error) {
-    console.error("❌ Failed to process gift deposit:", error);
+    console.error("Failed to process gift deposit:", error);
     res.status(500).json({ error: "Database error" });
   }
 });
 
 app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "public/index.html"));
+  res.sendFile(path.join(__dirname, "../dist/index.html"));
 });
 
-// Graceful shutdown
 process.on('SIGTERM', gracefulShutdown);
 process.on('SIGINT', gracefulShutdown);
 
 async function gracefulShutdown(signal) {
-  console.log(`\n🛑 Received ${signal}. Starting graceful shutdown...`);
+  console.log(`\nReceived ${signal}. Starting graceful shutdown...`);
 
   try {
-    // Закрываем все соединения с базой данных
     await dbPool.closeAll();
-    console.log("✅ Database connections closed");
+    console.log("Database connections closed");
 
-    // Очищаем все таймеры
     if (rouletteWaitingTimer) clearTimeout(rouletteWaitingTimer);
     if (rouletteBettingTimer) clearTimeout(rouletteBettingTimer);
     if (rouletteWaitingInterval) clearInterval(rouletteWaitingInterval);
     if (rouletteBettingInterval) clearInterval(rouletteBettingInterval);
 
-    console.log("✅ Graceful shutdown completed");
+    console.log("Graceful shutdown completed");
     process.exit(0);
   } catch (error) {
-    console.error("❌ Error during graceful shutdown:", error);
+    console.error("Error during graceful shutdown:", error);
     process.exit(1);
   }
 }
@@ -1845,20 +2128,18 @@ const PORT = process.env.PORT || 4000;
 const server = app.listen(PORT, async () => {
   console.log(`Server running on http://localhost:${PORT}`);
 
-  // Инициализируем TON Service
   try {
     await tonService.initialize();
-    console.log('✅ TON Service ready');
+    console.log('TON Service ready');
   } catch (error) {
-    console.error('❌ Failed to initialize TON Service:', error);
-    console.error('⚠️ Withdrawals will not work without TON Service');
+    console.error('Failed to initialize TON Service:', error);
+    console.error('Withdrawals will not work without TON Service');
   }
 
   startCrashLoop();
   resetRouletteRound();
 });
 
-// Настройка для graceful shutdown
 server.on('close', () => {
-  console.log('📡 HTTP server closed');
+  console.log('HTTP server closed');
 });
