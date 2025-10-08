@@ -80,7 +80,6 @@ function GiftCard({ gift, imageUrl, floorPrice, onClick }) {
         className="w-16 h-16 rounded-lg overflow-hidden bg-gray-800 border border-gray-700 cursor-pointer hover:border-gray-500 transition-colors relative"
         onClick={onClick}
       >
-        {/* Показать placeholder пока картинка загружается */}
         {!imageLoaded && !imageError && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="loading-spinner w-4 h-4"></div>
@@ -116,7 +115,7 @@ export default function Profile({ userId, user, setUser }) {
   const [isDepositing, setIsDepositing] = useState(false);
   const [withdrawalAmount, setWithdrawalAmount] = useState('');
   const [isWithdrawing, setIsWithdrawing] = useState(false);
-  const [activeAction, setActiveAction] = useState(null); // null | "deposit" | "withdraw"
+  const [activeAction, setActiveAction] = useState(null);
   const [gifts, setGifts] = useState([]);
   const [giftsFloorPrices, setGiftsFloorPrices] = useState({});
   const [showAddGiftModal, setShowAddGiftModal] = useState(false);
@@ -125,14 +124,12 @@ export default function Profile({ userId, user, setUser }) {
   const [giftsLoading, setGiftsLoading] = useState(false);
   const [giftsNames, setGiftsNames] = useState({});
 
-  // Smart logger (автоматически включается/отключается через config)
   const { debugData, logInfo, logSuccess, logError, logWarning, showDebug, closeDebug, clearLogs } = useSmartLogger();
 
   const handleDeposit = async () => {
-    clearLogs(); // Очищаем предыдущие логи
+    clearLogs();
     logInfo('🚀 Начинаем процесс депозита');
 
-    // Проверки
     logInfo('🔍 Проверяем данные:', {
       hasWallet: !!wallet,
       walletAddress: wallet?.account?.address,
@@ -224,7 +221,6 @@ export default function Profile({ userId, user, setUser }) {
 
         logSuccess('🎉 Депозит успешно обработан!');
 
-        // Обновляем данные пользователя
         logInfo('🔄 Обновляем данные пользователя...');
         loadUser(userId);
         setDepositAmount('');
@@ -243,7 +239,6 @@ export default function Profile({ userId, user, setUser }) {
         name: error.name
       });
 
-      // Определяем тип ошибки для пользователя
       let userFriendlyMessage = 'Неизвестная ошибка';
 
       if (error.message.includes('User declined') || error.message.includes('rejected')) {
@@ -270,12 +265,10 @@ export default function Profile({ userId, user, setUser }) {
     }
   };
 
-  // Функция обработки вывода
   const handleWithdraw = async () => {
     clearLogs();
     logInfo('🚀 Начинаем процесс вывода средств');
 
-    // Проверки
     logInfo('🔍 Проверяем данные:', {
       hasWallet: !!wallet,
       walletAddress: wallet?.account?.address,
@@ -309,7 +302,6 @@ export default function Profile({ userId, user, setUser }) {
     setIsWithdrawing(true);
 
     try {
-      // Отправляем уведомление о начале обработки СРАЗУ
       logInfo('📱 Отправляем уведомление о начале вывода...');
       try {
         await fetch(`${API}/api/user/withdraw-start`, {
@@ -357,7 +349,6 @@ export default function Profile({ userId, user, setUser }) {
 
       logSuccess('🎉 Вывод средств успешно обработан!');
 
-      // Обновляем данные пользователя
       if (responseData.user) {
         setUser(responseData.user);
         logInfo('🔄 Данные пользователя обновлены');
@@ -416,7 +407,6 @@ export default function Profile({ userId, user, setUser }) {
     setGiftsLoading(true);
 
     try {
-      // Получаем подарки пользователя
       const userResponse = await fetch(`${API}/api/user/${userId}/gifts`);
       if (!userResponse.ok) {
         setGifts([]);
@@ -426,17 +416,14 @@ export default function Profile({ userId, user, setUser }) {
       const userData = await userResponse.json();
       const userGifts = userData.gifts || [];
 
-      // Сразу устанавливаем подарки
       setGifts(userGifts);
 
       if (userGifts.length === 0) {
         return;
       }
 
-      // Получаем уникальные коллекции
       const collections = [...new Set(userGifts.map(gift => gift.split('-')[0]))];
 
-      // Параллельно запрашиваем floor цены и имена
       const [floorResponse, namesResponse] = await Promise.all([
         fetch(`${API}/api/gifts/floor`, {
           method: 'POST',
@@ -468,7 +455,6 @@ export default function Profile({ userId, user, setUser }) {
     }
   };
 
-  // ДОБАВИТЬ ФУНКЦИЮ получения имени подарка
   const getGiftName = (giftId) => {
     const collection = giftId.split('-')[0];
     return giftsNames[collection] || collection.charAt(0).toUpperCase() + collection.slice(1).replace(/([A-Z])/g, ' $1');
@@ -504,14 +490,13 @@ export default function Profile({ userId, user, setUser }) {
   }
 
   return (
-    <div className="flex flex-col h-full p-6">
-      {/* Аватар и основная информация */}
-      <div className="flex-none text-center mb-8">
-        <div className="flex justify-center mb-4">
-          <UserAvatar user={user} size="w-32 h-32" />
+    <div className="flex flex-col h-full px-0 py-6">
+      <div className="flex-none text-center mb-6">
+        <div className="flex justify-center mb-3">
+          <UserAvatar user={user} size="w-28 h-28" />
         </div>
 
-        <h2 className="text-2xl font-bold neon-text mb-2">
+        <h2 className="text-2xl font-bold neon-text mb-1">
           {getUserDisplayName(user)}
         </h2>
 
@@ -522,11 +507,10 @@ export default function Profile({ userId, user, setUser }) {
         <p className="text-gray-500 text-xs">ID: {user.id}</p>
       </div>
 
-      {/* Баланс */}
-      <div className="flex-none mb-8">
-        <div className="glass-card p-6 text-center">
+      <div className="flex-none mb-6">
+        <div className="glass-card p-5 text-center">
           <div className="text-sm text-gray-400 mb-2">Текущий баланс</div>
-          <div className="text-4xl font-bold neon-accent mb-4 flex items-center justify-center">
+          <div className="text-4xl font-bold neon-accent mb-3 flex items-center justify-center">
             <span>{formatTon(user.balance)}</span>
             <Ton className="w-8 h-8 ml-2" />
           </div>
@@ -539,7 +523,6 @@ export default function Profile({ userId, user, setUser }) {
               >
                 {loading ? "Обновление..." : "Обновить баланс"}
               </button>
-              {/* Кнопка для просмотра конфигурации - добавить в секцию с кнопками */}
 
               <button
                 onClick={() => {
@@ -563,15 +546,14 @@ export default function Profile({ userId, user, setUser }) {
         </div>
       </div>
 
-      <div className="flex-none mb-8">
-        <div className="glass-card p-6">
-          <div className="text-sm text-gray-400 mb-4">Мои подарки:</div>
-          <div className="flex overflow-x-auto gap-3 pb-2">
-            {/* Показать loading при первоначальной загрузке */}
+      <div className="flex-none mb-6">
+        <div className="glass-card p-4">
+          <div className="text-sm text-gray-400 mb-3">Мои подарки:</div>
+          <div className="flex overflow-x-auto gap-3 pb-1">
             {giftsLoading && gifts.length === 0 ? (
               <div className="flex-none">
                 <div className="w-16 h-16 rounded-lg bg-gray-800 border border-gray-700 flex items-center justify-center">
-                  <div className="loading-spinner w-6 h-6"></div>
+                  <div className="loading-spinner w-4 h-4"></div>
                 </div>
                 <div className="text-xs text-center mt-1 text-gray-500">
                   Загрузка...
@@ -598,11 +580,11 @@ export default function Profile({ userId, user, setUser }) {
               })
             )}
 
-            {/* Кнопка добавления */}
             <div className="flex-none">
               <button
                 onClick={() => setShowAddGiftModal(true)}
-                className="w-16 h-16 rounded-lg bg-gray-800 border border-gray-700 border-dashed flex items-center justify-center text-gray-400 hover:text-white hover:border-gray-500 transition-colors"
+                className="neon-btn neon-text-red flex-none"
+                style={{ height: '64px', width: '64px', minHeight: '64px', boxShadow: 'none' }}
               >
                 <span className="text-2xl">+</span>
               </button>
@@ -614,10 +596,9 @@ export default function Profile({ userId, user, setUser }) {
         </div>
       </div>
 
-      {/* Кнопки пополнения и вывода */}
       <div className="flex-1 flex flex-col justify-end">
-        <div className="space-y-4">
-          <div className="glass-card p-4 mb-4">
+        <div className="space-y-3">
+          <div className="glass-card p-4 mb-3">
             {!wallet ? (
               <button
                 onClick={() => tonConnectUI.openModal()}
@@ -628,7 +609,7 @@ export default function Profile({ userId, user, setUser }) {
             ) : (
               <>
                 <div className="text-sm text-gray-400 mb-2">Подключен кошелек:</div>
-                <div className="text-xs neon-text mb-4">
+                <div className="text-xs neon-text mb-3">
                   {wallet.account.address.slice(0, 6)}...{wallet.account.address.slice(-6)}
                 </div>
                 <button
@@ -661,7 +642,7 @@ export default function Profile({ userId, user, setUser }) {
 
           {activeAction === "deposit" && (
             <div className="glass-card p-4">
-              <div className="text-lg font-bold neon-accent mb-4">Пополнение баланса</div>
+              <div className="text-lg font-bold neon-accent mb-3">Пополнение баланса</div>
               <div className="text-sm text-gray-400 mb-2">Минимальная сумма: 0.01 TON</div>
               <input
                 type="number"
@@ -696,7 +677,7 @@ export default function Profile({ userId, user, setUser }) {
 
           {activeAction === "withdraw" && (
             <div className="glass-card p-4">
-              <div className="text-lg font-bold neon-accent mb-4">Вывод баланса</div>
+              <div className="text-lg font-bold neon-accent mb-3">Вывод баланса</div>
               <div className="text-sm text-gray-400 mb-2">
                 Минимум: {config.minWithdrawal} TON, Максимум: {user.balance} TON
               </div>
@@ -733,7 +714,7 @@ export default function Profile({ userId, user, setUser }) {
           )}
         </div>
       </div>
-      {/* Debug Modal - показывается только в debug режиме */}
+
       {config.debugMode && (
         <DebugModal
           isOpen={debugData.isOpen}
@@ -743,7 +724,7 @@ export default function Profile({ userId, user, setUser }) {
           error={debugData.error}
         />
       )}
-      {/* Модальные окна */}
+
       <AddGiftModal
         isOpen={showAddGiftModal}
         onClose={() => setShowAddGiftModal(false)}
