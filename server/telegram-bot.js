@@ -1,6 +1,6 @@
 import axios from 'axios';
 import dotenv from 'dotenv';
-import { Address } from '@ton/core';
+import { Address } from 'ton';
 
 dotenv.config();
 
